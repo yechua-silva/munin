@@ -1,0 +1,53 @@
+# --- Secrets ---
+.env
+.env.local
+*.env
+!.env.example
+
+# --- API Keys ---
+*.key
+*.pem
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+
+# --- Virtual Environments ---
+.venv/
+venv/
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- Testing ---
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Model weights (large files) ---
+*.pt
+*.pth
+*.onnx
+
+# --- Demo videos (large) ---
+demo/video.mp4
+demo/*.mp4
+
+# --- Temp ---
+*.log
+*.tmp
+tmp/
+
+# --- Cache ---
+.mypy_cache/
+.ruff_cache/

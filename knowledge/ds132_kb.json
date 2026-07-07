@@ -1,0 +1,45 @@
+{
+  "metadata": {
+    "norma": "DS 132 — Reglamento de Seguridad Minera (Chile)",
+    "version": "2026",
+    "descripcion": "Artículos relevantes para detección de EPP en faenas mineras"
+  },
+  "articulos": [
+    {
+      "id": "Art. 38",
+      "titulo": "Uso obligatorio de elementos de protección personal",
+      "texto": "Todo trabajador que se desempeñe en una faena minera deberá utilizar los elementos de protección personal que correspondan según el tipo de trabajo y la zona en que se encuentre. El empleador deberá proporcionarlos sin costo para el trabajador.",
+      "zonas_aplicables": ["extraccion", "procesamiento", "mantencion"],
+      "epp_requeridos": ["hardhat", "safety_vest", "safety_boots"],
+      "nivel_incumplimiento": "ALTO",
+      "referencias": ["NCh 1411", "NCh 1412"]
+    },
+    {
+      "id": "Art. 42",
+      "titulo": "Protección contra caídas en trabajos en altura",
+      "texto": "En trabajos realizados a más de 1.8 metros de altura, será obligatorio el uso de arnés de seguridad debidamente anclado a una línea de vida u otro sistema de detención de caídas certificado. El arnés deberá ser inspeccionado antes de cada uso.",
+      "zonas_aplicables": ["extraccion", "mantencion"],
+      "epp_requeridos": ["harness"],
+      "nivel_incumplimiento": "CRITICO",
+      "referencias": ["NCh 1258", "NCh 1299"]
+    },
+    {
+      "id": "Art. 45",
+      "titulo": "EPP en zonas de extracción y procesamiento",
+      "texto": "En las zonas de extracción y procesamiento de minerales, los trabajadores deberán utilizar obligatoriamente casco de seguridad, chaleco reflectante, lentes de seguridad, guantes de protección y botas de seguridad con puntera de acero. Adicionalmente, cuando corresponda, protección respiratoria contra polvo y gases.",
+      "zonas_aplicables": ["extraccion", "procesamiento"],
+      "epp_requeridos": ["hardhat", "safety_vest", "safety_glasses", "gloves", "safety_boots"],
+      "nivel_incumplimiento": "ALTO",
+      "referencias": ["NCh 1411", "NCh 1272", "NCh 1332"]
+    },
+    {
+      "id": "Art. 50",
+      "titulo": "Protección ocular y respiratoria en mantención",
+      "texto": "En trabajos de mantención que involucren exposición a partículas en suspensión, soldadura, esmerilado o manipulación de sustancias químicas, será obligatorio el uso de lentes de seguridad y protección respiratoria adecuada al tipo de riesgo.",
+      "zonas_aplicables": ["mantencion"],
+      "epp_requeridos": ["safety_glasses"],
+      "nivel_incumplimiento": "MEDIO",
+      "referencias": ["NCh 1332", "NCh 1360"]
+    }
+  ]
+}
