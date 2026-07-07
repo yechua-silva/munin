@@ -135,7 +135,7 @@ def create_extractor_agent(model: OpenAIChatModel) -> Agent[None, ExtractionResu
         model,
         output_type=ExtractionResult,
         retries={"output": 3},
-        model_settings=ModelSettings(temperature=0.1, max_tokens=1024),
+        model_settings=ModelSettings(temperature=0.1, max_tokens=8192),
         system_prompt=PROMPT_EXTRACTOR,
     )
 

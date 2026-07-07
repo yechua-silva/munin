@@ -4,6 +4,7 @@ import logging
 import os
 
 from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai import ModelSettings
 
 from munin.config import AppSettings, VLMBackend
 from munin.exceptions import ConfigurationError
@@ -51,6 +52,7 @@ class VLMModelFactory:
                 provider=FireworksProvider(
                     api_key=settings.fireworks_api_key,
                 ),
+                settings=ModelSettings(max_tokens=8192),
             )
 
         elif settings.vlm_backend == VLMBackend.AMD:
@@ -69,6 +71,7 @@ class VLMModelFactory:
             return OpenAIChatModel(
                 settings.amd_model,
                 provider=OpenAIProvider(openai_client=client),
+                settings=ModelSettings(max_tokens=8192),
             )
 
         raise ConfigurationError(

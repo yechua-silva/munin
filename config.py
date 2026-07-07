@@ -90,7 +90,7 @@ class AppSettings(BaseSettings):
     vlm_backend: VLMBackend = Field(default=VLMBackend.FIREWORKS)
     fireworks_api_key: str = Field(default="")
     fireworks_model: str = Field(
-        default="accounts/fireworks/models/qwen3-vl-8b-instruct"
+        default="accounts/fireworks/models/kimi-k2p6"
     )
     amd_vllm_endpoint: str = Field(default="http://localhost:8000/v1")
     amd_model: str = Field(default="InternVL2-8B")
@@ -124,6 +124,7 @@ class AppSettings(BaseSettings):
         env_prefix="MUNIN_",
         env_file=".env",
         env_file_encoding="utf-8",
+        extra="ignore",
     )
 
 

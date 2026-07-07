@@ -62,7 +62,7 @@ def create_single_pass_agent(model: OpenAIChatModel) -> Agent[None, AgentDecisio
         model,
         output_type=AgentDecision,
         retries={"output": 3},
-        model_settings=ModelSettings(temperature=0.1, max_tokens=1024),
+        model_settings=ModelSettings(temperature=0.1, max_tokens=8192),
         system_prompt=PROMPT_SINGLE_PASS,
     )
 

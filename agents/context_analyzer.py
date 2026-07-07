@@ -102,7 +102,7 @@ def create_context_analyzer_agent(
         model,
         output_type=AnalysisResult,
         retries={"output": 3},
-        model_settings=ModelSettings(temperature=0.1, max_tokens=1024),
+        model_settings=ModelSettings(temperature=0.1, max_tokens=8192),
         system_prompt=PROMPT_CONTEXT_ANALYZER,
     )
 
