@@ -127,7 +127,7 @@ class TestParseResultsV4:
             mock_box = MagicMock()
             mock_box.cls = [class_id]
             mock_box.conf = [0.9]
-            mock_box.xyxy = [[10, 20, 100, 200]]
+            mock_box.xyxy = [np.array([10, 20, 100, 200])]
             mock_result.boxes.append(mock_box)
 
         results = detector._parse_results(mock_result)
@@ -155,13 +155,13 @@ class TestParseResultsV4:
         valid_box = MagicMock()
         valid_box.cls = [0]  # person
         valid_box.conf = [0.9]
-        valid_box.xyxy = [[10, 20, 100, 200]]
+        valid_box.xyxy = [np.array([10, 20, 100, 200])]
         mock_result.boxes.append(valid_box)
 
         unknown_box = MagicMock()
         unknown_box.cls = [99]  # not in map
         unknown_box.conf = [0.9]
-        unknown_box.xyxy = [[50, 60, 150, 250]]
+        unknown_box.xyxy = [np.array([50, 60, 150, 250])]
         mock_result.boxes.append(unknown_box)
 
         import logging
@@ -190,14 +190,11 @@ class TestParseResultsV4:
         high_conf_box = MagicMock()
         high_conf_box.cls = [0]
         high_conf_box.conf = [0.9]
-        high_conf_box.xyxy = [[10, 20, 100, 200]]
+        high_conf_box.xyxy = [np.array([10, 20, 100, 200])]
         mock_result.boxes.append(high_conf_box)
 
         # Below threshold
-        low_conf_box = MagicMock()
-        low_conf_box.cls = [1]
-        low_conf_box.conf = [0.4]
-        low_conf_box.xyxy = [[50, 60, 150, 250]]
+        low_conf_box.xyxy = [np.array([50, 60, 150, 250])]
         mock_result.boxes.append(low_conf_box)
 
         results = detector._parse_results(mock_result)
@@ -239,7 +236,7 @@ class TestParseResultsV4:
             box = MagicMock()
             box.cls = [i]  # 0, 1, 2
             box.conf = [conf]
-            box.xyxy = [[10, 20, 100, 200]]
+            box.xyxy = [np.array([10, 20, 100, 200])]
             mock_result.boxes.append(box)
 
         results = detector._parse_results(mock_result)
@@ -267,7 +264,7 @@ class TestDetectionResultV4:
         box = MagicMock()
         box.cls = [1]  # hardhat
         box.conf = [0.85]
-        box.xyxy = [[10.5, 20.3, 100.7, 200.9]]
+        box.xyxy = [np.array([10.5, 20.3, 100.7, 200.9])]
         mock_result.boxes.append(box)
 
         results = detector._parse_results(mock_result)
@@ -304,7 +301,7 @@ class TestDetectMethodV4:
         box = MagicMock()
         box.cls = [0]
         box.conf = [0.9]
-        box.xyxy = [[10, 20, 100, 200]]
+        box.xyxy = [np.array([10, 20, 100, 200])]
         mock_result.boxes.append(box)
 
         mock_model.predict.return_value = [mock_result]
