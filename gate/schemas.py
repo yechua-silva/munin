@@ -115,6 +115,9 @@ class Violation(BaseModel):
     timestamp: datetime = Field(
         default_factory=datetime.now, description="Momento de la detección"
     )
+    camera_id: str = Field(
+        default="default", description="ID de la cámara que capturó el frame"
+    )
 
 
 class AgentDecision(BaseModel):
@@ -161,6 +164,9 @@ class AgentDecision(BaseModel):
     )
     razonamiento_vlm: str | None = Field(
         default=None, description="Razonamiento del VLM"
+    )
+    camera_id: str = Field(
+        default="default", description="ID de la cámara que generó la decisión"
     )
 
 
