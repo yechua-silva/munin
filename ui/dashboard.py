@@ -9,9 +9,10 @@ import streamlit as st
 
 import numpy as np
 
-from munin.config import AppSettings
+from munin.config import AppSettings, Zone
 from munin.gate.schemas import AgentDecision, DetectionResult, TrackedPerson, Violation
 from munin.pipeline.factory import PipelineFactory
+from munin.pipeline.supervision_standardizer import SupervisionStandardizer
 
 logger = logging.getLogger(__name__)
 
@@ -151,102 +152,70 @@ class StreamlitDashboard:
         detections: list[DetectionResult],
         persons: list[TrackedPerson] | None = None,
         violations: list[Violation] | None = None,
+        zone: Zone | None = None,
     ) -> np.ndarray:
-        """Anota un frame con bounding boxes, labels y traces usando supervision.
+        """Anota un frame con bounding boxes, labels, traces y zona usando supervision.
 
         ADR-019: Supervision se usa SOLO en dashboard, no en pipeline.
+        ADR-028: SupervisionStandardizer bridge para conversión Detections→sv.Detections.
 
         Args:
             frame: Frame original (HWC BGR uint8).
             detections: Detecciones de YOLO en el frame.
             persons: Personas trackeadas con IDs (opcional).
             violations: Violaciones detectadas (opcional).
+            zone: Zona configurada con polígono opcional (v4).
 
         Returns:
-            Frame anotado con bounding boxes, labels y traces.
+            Frame anotado con bounding boxes, labels, traces y zona.
         """
         if not SUPERVISION_AVAILABLE:
             return frame
 
-        # Convertir DetectionResult → sv.Detections
-        if not detections:
-            return frame
-
-        xyxy = np.array([d.bbox for d in detections], dtype=np.float32)
-        confidence = np.array([d.confidence for d in detections], dtype=np.float32)
-        class_names = np.array([d.class_name for d in detections])
-
-        sv_detections = sv.Detections(
-            xyxy=xyxy,
-            confidence=confidence,
-            class_id=np.arange(len(detections)),
-            data={"class_name": class_names},
-        )
-
-        # Añadir tracker_id si hay persons
-        if persons:
-            tracker_ids = []
-            for det in detections:
-                # Match por bbox closest person
-                best_id = -1
-                best_iou = 0.0
-                for person in persons:
-                    iou = self._compute_iou(det.bbox, person.bbox)
-                    if iou > best_iou:
-                        best_iou = iou
-                        best_id = person.persona_id
-                tracker_ids.append(best_id if best_iou > 0.3 else -1)
-            sv_detections.tracker_id = np.array(tracker_ids)
-
-        # Annotators
         annotated = frame.copy()
 
-        # BoxAnnotator
-        box_annotator = sv.BoxAnnotator()
-        annotated = box_annotator.annotate(annotated, sv_detections)
-
-        # LabelAnnotator
-        labels = [
-            f"{d.class_name} {d.confidence:.2f}"
-            for d in detections
-        ]
-        label_annotator = sv.LabelAnnotator()
-        annotated = label_annotator.annotate(
-            annotated, sv_detections, labels=labels
+        # Convertir DetectionResult → sv.Detections via SupervisionStandardizer
+        sv_detections = SupervisionStandardizer.from_detection_results(
+            detections, persons
         )
 
-        # TraceAnnotator si hay tracker_ids
-        if persons and hasattr(sv, 'TraceAnnotator'):
-            trace_annotator = sv.TraceAnnotator()
-            annotated = trace_annotator.annotate(annotated, sv_detections)
+        if len(sv_detections) > 0:
+            # BoxAnnotator
+            box_annotator = sv.BoxAnnotator()
+            annotated = box_annotator.annotate(annotated, sv_detections)
+
+            # LabelAnnotator
+            labels = [
+                f"{d.class_name} {d.confidence:.2f}"
+                for d in detections
+            ]
+            label_annotator = sv.LabelAnnotator()
+            annotated = label_annotator.annotate(
+                annotated, sv_detections, labels=labels
+            )
+
+            # TraceAnnotator si hay tracker_ids
+            if persons and hasattr(sv, 'TraceAnnotator'):
+                trace_annotator = sv.TraceAnnotator()
+                annotated = trace_annotator.annotate(annotated, sv_detections)
+
+        # PolygonZoneAnnotator si zone tiene polygon (v4)
+        if zone is not None and zone.polygon is not None:
+            h, w = frame.shape[:2]
+            for sub_poly in zone.polygon:
+                poly_px = np.array(
+                    [[p[0] * w, p[1] * h] for p in sub_poly],
+                    dtype=np.int64,
+                )
+                polygon_zone = sv.PolygonZone(polygon=poly_px)
+                zone_annotator = sv.PolygonZoneAnnotator(
+                    zone=polygon_zone,
+                    color=sv.Color.RED,
+                    opacity=0.15,
+                )
+                annotated = zone_annotator.annotate(annotated)
 
         return annotated
-
-    @staticmethod
-    def _compute_iou(
-        bbox_a: tuple[float, float, float, float],
-        bbox_b: tuple[float, float, float, float],
-    ) -> float:
-        """Calcula IoU entre dos bboxes.
-
-        Args:
-            bbox_a: Primer bounding box (x1, y1, x2, y2).
-            bbox_b: Segundo bounding box (x1, y1, x2, y2).
-
-        Returns:
-            IoU (Intersection over Union) como float entre 0.0 y 1.0.
-        """
-        x1 = max(bbox_a[0], bbox_b[0])
-        y1 = max(bbox_a[1], bbox_b[1])
-        x2 = min(bbox_a[2], bbox_b[2])
-        y2 = min(bbox_a[3], bbox_b[3])
-        if x2 <= x1 or y2 <= y1:
-            return 0.0
-        intersection = (x2 - x1) * (y2 - y1)
-        area_a = (bbox_a[2] - bbox_a[0]) * (bbox_a[3] - bbox_a[1])
-        area_b = (bbox_b[2] - bbox_b[0]) * (bbox_b[3] - bbox_b[1])
-        union = area_a + area_b - intersection
-        return intersection / union if union > 0 else 0.0
 
     # ------------------------------------------------------------------
     # Renderizado de resultados
