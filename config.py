@@ -70,11 +70,12 @@ class AppSettings(BaseSettings):
     Se cargan automáticamente desde un archivo .env si existe.
 
     Attributes:
-        vlm_backend: Backend VLM a usar (fireworks | amd).
+        vlm_backend: Backend VLM a usar (amd | fireworks). Default: amd (on-premise).
         fireworks_api_key: API key para Fireworks AI.
         fireworks_model: Modelo VLM en Fireworks.
         amd_vllm_endpoint: Endpoint de vLLM en AMD MI300X.
         amd_model: Modelo VLM en AMD vLLM.
+        vlm_max_tokens: Máximo de tokens en respuesta VLM.
         yolo_model_path: Ruta al modelo YOLO (.pt).
         yolo_confidence_threshold: Threshold de confianza YOLO.
         yolo_device: Dispositivo de inferencia YOLO.
@@ -94,13 +95,24 @@ class AppSettings(BaseSettings):
     """
 
     # VLM Backend
-    vlm_backend: VLMBackend = Field(default=VLMBackend.FIREWORKS)
+    vlm_backend: VLMBackend = Field(
+        default=VLMBackend.AMD,
+        description="Backend VLM: 'amd' (vLLM on-premise MI300X) o 'fireworks' (cloud interim)",
+    )
     fireworks_api_key: str = Field(default="")
     fireworks_model: str = Field(
         default="accounts/fireworks/models/kimi-k2p6"
     )
     amd_vllm_endpoint: str = Field(default="http://localhost:8000/v1")
-    amd_model: str = Field(default="InternVL2-8B")
+    amd_model: str = Field(
+        default="openbmb/MiniCPM-V-2_6",
+        description="Modelo VLM para AMD vLLM (MiniCPM-V-2.6: 8B params, ~8GB VRAM)",
+    )
+    vlm_max_tokens: int = Field(
+        default=8192,
+        ge=256, le=32768,
+        description="Max tokens para respuestas VLM (256-32768)",
+    )
 
     # YOLO
     yolo_model_path: str = Field(

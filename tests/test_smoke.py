@@ -246,9 +246,13 @@ class TestConfig:
     def test_app_settings_defaults(self) -> None:
         """AppSettings carga con defaults (sin .env)."""
         from munin.config import AppSettings, VLMBackend
-        # AppSettings puede cargar sin .env porque todos los campos tienen defaults
         settings = AppSettings(_env_file=None)
-        assert settings.vlm_backend == VLMBackend.FIREWORKS
+        # VLM backend — ahora AMD on-premise por default
+        assert settings.vlm_backend == VLMBackend.AMD
+        assert settings.amd_model == "openbmb/MiniCPM-V-2_6"
+        assert settings.amd_vllm_endpoint == "http://localhost:8000/v1"
+        assert settings.vlm_max_tokens == 8192
+        # Pipeline
         assert settings.frame_rate == 25
         assert settings.min_consecutive_frames == 3
         # Nuevos campos v3
@@ -294,23 +298,62 @@ class TestVLMModelFactory:
     def test_factory_missing_api_key_raises(self) -> None:
         """Factory lanza ConfigurationError si falta API key para Fireworks."""
         from munin.vlm.factory import VLMModelFactory
+        from munin.config import AppSettings, VLMBackend
+        from munin.exceptions import ConfigurationError
+
+        settings = AppSettings(_env_file=None)
+        settings.vlm_backend = VLMBackend.FIREWORKS  # Explicit Fireworks
+        settings.fireworks_api_key = ""
+        with pytest.raises(ConfigurationError):
+            VLMModelFactory.create(settings)
+
+    def test_factory_creates_fireworks_model(self) -> None:
+        """Factory con API key crea un OpenAIChatModel (Fireworks backend explícito)."""
+        from munin.vlm.factory import VLMModelFactory
+        from munin.config import AppSettings, VLMBackend
+        from pydantic_ai.models.openai import OpenAIChatModel
+
+        settings = AppSettings(_env_file=None)
+        settings.vlm_backend = VLMBackend.FIREWORKS  # Explicit Fireworks
+        settings.fireworks_api_key = "test-key-123"
+
+        model = VLMModelFactory.create(settings)
+        assert isinstance(model, OpenAIChatModel)
+
+    def test_factory_creates_amd_model(self) -> None:
+        """Factory con AMD backend crea un OpenAIChatModel apuntando a vLLM."""
+        from munin.vlm.factory import VLMModelFactory
+        from munin.config import AppSettings, VLMBackend
+        from pydantic_ai.models.openai import OpenAIChatModel
+
+        settings = AppSettings(_env_file=None)
+        settings.vlm_backend = VLMBackend.AMD  # Default, but explicit
+        settings.amd_vllm_endpoint = "http://localhost:8000/v1"
+        settings.amd_model = "openbmb/MiniCPM-V-2_6"
+
+        model = VLMModelFactory.create(settings)
+        assert isinstance(model, OpenAIChatModel)
+
+    def test_factory_amd_no_api_key_needed(self) -> None:
+        """AMD backend no requiere API key — vLLM usa api_key='dummy'."""
+        from munin.vlm.factory import VLMModelFactory
+        from munin.config import AppSettings, VLMBackend
+        from pydantic_ai.models.openai import OpenAIChatModel
+
+        settings = AppSettings(_env_file=None)
+        settings.vlm_backend = VLMBackend.AMD
+        # No API key set — should NOT raise
+        model = VLMModelFactory.create(settings)
+        assert isinstance(model, OpenAIChatModel)
+
+    def test_factory_unknown_backend_raises(self) -> None:
+        """Backend desconocido lanza ConfigurationError."""
+        from munin.vlm.factory import VLMModelFactory
         from munin.config import AppSettings
         from munin.exceptions import ConfigurationError
 
-        settings = AppSettings()
-        settings.fireworks_api_key = ""
-        # Fireworks sin API key debe lanzar ConfigurationError
+        settings = AppSettings(_env_file=None)
+        # Simulate unknown backend by monkey-patching
+        settings.vlm_backend = "unknown_backend"  # type: ignore[assignment]
         with pytest.raises(ConfigurationError):
             VLMModelFactory.create(settings)
-    
-    def test_factory_creates_fireworks_model(self) -> None:
-        """Factory con API key crea un OpenAIChatModel (sin conexión real)."""
-        from munin.vlm.factory import VLMModelFactory
-        from munin.config import AppSettings
-        from pydantic_ai.models.openai import OpenAIChatModel
-
-        settings = AppSettings()
-        settings.fireworks_api_key = "test-key-123"
-        
-        model = VLMModelFactory.create(settings)
-        assert isinstance(model, OpenAIChatModel)

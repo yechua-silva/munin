@@ -24,12 +24,16 @@ SHARED_BASE_SYSTEM_PROMPT: str = (
 class VLMModelFactory:
     """Factory para crear el modelo VLM según configuración.
 
-    Usa PydanticAI con FireworksProvider o OpenAIProvider (para AMD vLLM).
-    Strategy Pattern: el backend se selecciona via AppSettings.vlm_backend.
+    Usa PydanticAI con OpenAIProvider (para AMD vLLM on-premise) o
+    FireworksProvider (cloud interim). Strategy Pattern: el backend
+    se selecciona via AppSettings.vlm_backend.
+
+    ADR-021: Default backend cambiado a AMD (vLLM on-premise MI300X).
+    Fireworks permanece como fallback cloud.
 
     ADR-015: SHARED_BASE_SYSTEM_PROMPT se usa como prefijo en los prompts
-    de cada agente para maximizar cache hits en Fireworks (83% descuento
-    en tokens de prompt cacheados).
+    de cada agente. En Fireworks maximiza cache hits; en vLLM mejora
+    consistencia de respuestas.
 
     Attributes:
         _settings: Configuración de la aplicación.
@@ -72,10 +76,15 @@ class VLMModelFactory:
             return OpenAIChatModel(
                 settings.fireworks_model,
                 provider=FireworksProvider(openai_client=client),
-                settings=ModelSettings(max_tokens=8192),
+                settings=ModelSettings(max_tokens=settings.vlm_max_tokens),
             )
 
         elif settings.vlm_backend == VLMBackend.AMD:
+            if not settings.amd_vllm_endpoint:
+                raise ConfigurationError(
+                    "AMD vLLM endpoint no configurado. "
+                    "Set MUNIN_AMD_VLLM_ENDPOINT in .env"
+                )
             from pydantic_ai.providers.openai import OpenAIProvider
             from openai import AsyncOpenAI
 
@@ -92,7 +101,7 @@ class VLMModelFactory:
             return OpenAIChatModel(
                 settings.amd_model,
                 provider=OpenAIProvider(openai_client=client),
-                settings=ModelSettings(max_tokens=8192),
+                settings=ModelSettings(max_tokens=settings.vlm_max_tokens),
             )
 
         raise ConfigurationError(

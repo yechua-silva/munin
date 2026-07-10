@@ -7,15 +7,15 @@
 [![Python](https://img.shields.io/badge/python-3.12+-blue)]()
 [![GPU](https://img.shields.io/badge/GPU-AMD%20MI300X-red)]()
 [![ROCm](https://img.shields.io/badge/ROCm-7.2.4-orange)]()
-[![Tests](https://img.shields.io/badge/tests-84%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-87%20passed-brightgreen)]()
 
 ---
 
 ## Overview
 
-Munin is an industrial vision agent that detects PPE (Personal Protective Equipment) violations in mining operations in real-time. It runs entirely on-premise on AMD MI300X (192GB HBM3) — video never leaves the site.
+Munin is an industrial vision agent that detects PPE (Personal Protective Equipment) violations in mining operations in real-time. It runs entirely on-premise on AMD MI300X (192GB HBM3) — both detection (YOLO) and VLM analysis (MiniCPM-V-2.6 via vLLM) run on the same GPU. Video never leaves the site.
 
-**v3** introduces dual-mode detection (LEGACY + DUAL_CLASS), ByteTrack native tracking via `model.track(persist=True)`, supervision-powered dashboard annotators, and prompt caching for 83% token reduction on Fireworks AI.
+**v3** introduces dual-mode detection (LEGACY + DUAL_CLASS), ByteTrack native tracking via `model.track(persist=True)`, supervision-powered dashboard annotators, and prompt caching for 83% token reduction on the VLM backend.
 
 ---
 
@@ -60,8 +60,8 @@ DUAL_CLASS mode uses `NEGATIVE_CLASS_MAP` to detect explicit absence (e.g., `no_
 |-------|-----------|
 | GPU | AMD MI300X (192GB HBM3), ROCm 7.2.4 |
 | Detection | YOLOv8n (ultralytics) with ByteTrack `model.track()` |
-| VLM | Kimi K2.6 via Fireworks AI (interim) / vLLM ROCm (target) |
-| Agent Framework | PydanticAI with FireworksProvider |
+| VLM | MiniCPM-V-2.6 via vLLM ROCm (on-premise MI300X) |
+| Agent Framework | PydanticAI with OpenAIProvider |
 | Tracking | ByteTrackAdapter (primary) / PersonTracker (fallback) |
 | Dashboard | Streamlit + supervision annotators (BoxAnnotator, LabelAnnotator, TraceAnnotator) |
 | Backend | FastAPI |
@@ -85,7 +85,7 @@ DUAL_CLASS mode uses `NEGATIVE_CLASS_MAP` to detect explicit absence (e.g., `no_
 ### Docker (AMD GPU)
 
 ```bash
-cp .env.example .env  # Fill in FIREWORKS_API_KEY
+cp .env.example .env  # Default VLM_BACKEND=amd (on-premise)
 docker build -t munin .
 docker run -it --device /dev/kfd --device /dev/dri \
   --group-add video --shm-size 8G \
@@ -98,7 +98,7 @@ docker run -it --device /dev/kfd --device /dev/dri \
 pip install -r requirements.txt
 # Optional: supervision for dashboard annotators
 pip install supervision>=0.25.0
-cp .env.example .env  # Fill in FIREWORKS_API_KEY
+cp .env.example .env  # Default VLM_BACKEND=amd (on-premise)
 ```
 
 ---
@@ -126,13 +126,16 @@ All settings via environment variables with `MUNIN_` prefix (see `.env.example`)
 
 | Key | Default | Description |
 |-----|---------|-------------|
+| `MUNIN_VLM_BACKEND` | `amd` | `amd` (vLLM on-premise) or `fireworks` (cloud) |
 | `MUNIN_COMPLIANCE_MODE` | `legacy` | `legacy` or `dual_class` |
 | `MUNIN_YOLO_DEVICE` | `cuda:0` | GPU device |
 | `MUNIN_VLM_BUSY_TIMEOUT` | `300.0` | VLM timeout in seconds |
+| `MUNIN_VLM_MAX_TOKENS` | `8192` | Max tokens for VLM responses |
+| `MUNIN_AMD_MODEL` | `openbmb/MiniCPM-V-2_6` | VLM model for vLLM |
 | `MUNIN_FRAME_RESIZE_WIDTH` | `640` | Frame resize for VLM |
 | `MUNIN_FRAME_RESIZE_HEIGHT` | `480` | Frame resize for VLM |
 | `MUNIN_YOLO_IMGSZ` | `640` | YOLO input size (320–1280) |
-| `MUNIN_PROMPT_CACHE_SESSION_ID` | `munin-session` | Fireworks prompt caching session |
+| `MUNIN_PROMPT_CACHE_SESSION_ID` | `munin-session` | VLM prompt caching session |
 
 ### API Endpoints
 
@@ -198,7 +201,7 @@ munin/
 ## Testing
 
 ```bash
-# Full suite (84 tests, ~3.5s)
+# Full suite (87 tests, ~3.5s)
 python -m pytest tests/ -v --tb=short
 
 # TDD components only
@@ -218,7 +221,7 @@ python -m pytest tests/ -v --cov=munin --cov-report=term-missing
 | `test_byte_track_adapter.py` | 8 | Yes | ByteTrackAdapter with MagicMock |
 | `test_gate.py` | 8 | No | Pydantic Gate validation |
 | `test_interfaces_v3.py` | 7 | Yes | Protocol compliance (duck typing) |
-| **Total** | **84** | **4 TDD** | **All core components** |
+| **Total** | **87** | **4 TDD** | **All core components** |
 
 ---
 
@@ -234,6 +237,7 @@ python -m pytest tests/ -v --cov=munin --cov-report=term-missing
 | 018 | IDetector abstraction (TwoModel + SingleModel) | ✅ Vigente |
 | 019 | Supervision in dashboard only (not pipeline) | ✅ Vigente |
 | 020 | Deploy via docker exec in existing container | ✅ Vigente |
+| 021 | Switch VLM default to AMD vLLM on-premise | ✅ Vigente |
 
 ---
 
@@ -256,7 +260,7 @@ Munin checks PPE compliance against Chilean DS 132 (Decreto Supremo 132):
 | `yolov8n.pt` path in droplet | Low | ByteTrackAdapter falls back to PersonTracker when `yolov8n.pt` is not in CWD on the droplet. | Set `MUNIN_YOLO_COCO_MODEL_PATH=/scratch/yolov8n.pt` in `.env` |
 | supervision is optional | Low | Dashboard annotators require `supervision>=0.25.0` but it is not in core `requirements.txt`. | `pip install supervision` or uncomment from requirements |
 | Real video test | Medium | Smoke tests use synthetic video (30 frames, no real persons). | Test with real CCTV footage of workers |
-| ROCm on-premise VLM | Medium | Currently using Fireworks AI (cloud). vLLM + InternVL2-8B on MI300X not yet deployed. | Deploy vLLM on droplet, switch `MUNIN_VLM_BACKEND=amd` |
+| ROCm on-premise VLM | ✅ Implemented | MiniCPM-V-2.6 via vLLM on AMD MI300X (ADR-021) |
 | E2E test with VLM | Medium | Smoke test runs without API key (no VLM calls). | Test with real Fireworks API key for VLM analysis |
 
 ---
@@ -275,7 +279,7 @@ Munin checks PPE compliance against Chilean DS 132 (Decreto Supremo 132):
 | Supervision dashboard | ✅ Implemented | BoxAnnotator, LabelAnnotator, TraceAnnotator (optional) |
 | Fine-tune Construction-PPE | ✅ Complete | `best.pt` (6MB, 11 classes) on MI300X |
 | Deploy script | ✅ Implemented | `deploy_munin.sh` (SSH + docker exec) |
-| ROCm on-premise VLM | 📋 Planned | vLLM with InternVL2-8B on AMD MI300X |
+| ROCm on-premise VLM | ✅ Implemented | vLLM with MiniCPM-V-2.6 on AMD MI300X |
 
 ---
 
