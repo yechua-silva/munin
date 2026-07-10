@@ -153,7 +153,7 @@ def _compute_dhash(image_path: Path, hash_size: int = 8) -> int:
     pixels = np.asarray(img, dtype=np.int32)
     diff = pixels[:, 1:] > pixels[:, :-1]
     hash_bits = diff.flatten()
-    hash_int = sum(bit << i for i, bit in enumerate(hash_bits))
+    hash_int = int(sum(bit << i for i, bit in enumerate(hash_bits)))
     return hash_int
 
 

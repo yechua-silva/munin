@@ -75,7 +75,7 @@ class TestIgnoredClassesV4:
 class TestInit:
     """Verify detector initialization."""
 
-    @patch("munin.pipeline.single_model_detector.YOLO")
+    @patch("ultralytics.YOLO")
     def test_init_success(self, mock_yolo: MagicMock, tmp_path: MagicMock) -> None:
         """Detector initializes correctly with valid model path."""
         model_path = tmp_path / "best.pt"
@@ -87,13 +87,12 @@ class TestInit:
         assert detector._device == "cpu"
         assert detector._imgsz == 640
 
-    @patch("munin.pipeline.single_model_detector.YOLO")
-    def test_init_raises_on_missing_model(self, mock_yolo: MagicMock) -> None:
+    def test_init_raises_on_missing_model(self) -> None:
         """Detector must raise ConfigurationError if model not found."""
         with pytest.raises(ConfigurationError):
             SingleModelDetector("/nonexistent/model.pt")
 
-    @patch("munin.pipeline.single_model_detector.YOLO")
+    @patch("ultralytics.YOLO")
     def test_init_raises_on_yolo_error(
         self, mock_yolo: MagicMock, tmp_path: MagicMock
     ) -> None:
@@ -110,7 +109,7 @@ class TestInit:
 class TestParseResultsV4:
     """Verify _parse_results handles all 13 v4 classes."""
 
-    @patch("munin.pipeline.single_model_detector.YOLO")
+    @patch("ultralytics.YOLO")
     def test_all_13_classes_are_mapped(
         self, mock_yolo: MagicMock, tmp_path: MagicMock
     ) -> None:
@@ -139,7 +138,7 @@ class TestParseResultsV4:
         expected_names = set(CONSTRUCTION_PPE_CLASS_MAP.values())
         assert class_names_found == expected_names
 
-    @patch("munin.pipeline.single_model_detector.YOLO")
+    @patch("ultralytics.YOLO")
     def test_unknown_class_skipped_with_warning(
         self, mock_yolo: MagicMock, tmp_path: MagicMock, caplog: MagicMock
     ) -> None:
@@ -174,7 +173,7 @@ class TestParseResultsV4:
         assert results[0].class_name == "person"
         assert "Unknown class_id 99" in caplog.text
 
-    @patch("munin.pipeline.single_model_detector.YOLO")
+    @patch("ultralytics.YOLO")
     def test_confidence_filter(
         self, mock_yolo: MagicMock, tmp_path: MagicMock
     ) -> None:
@@ -206,7 +205,7 @@ class TestParseResultsV4:
         assert len(results) == 1
         assert results[0].class_name == "person"
 
-    @patch("munin.pipeline.single_model_detector.YOLO")
+    @patch("ultralytics.YOLO")
     def test_no_boxes_returns_empty(
         self, mock_yolo: MagicMock, tmp_path: MagicMock
     ) -> None:
@@ -222,7 +221,7 @@ class TestParseResultsV4:
         mock_empty.boxes = None
         assert detector._parse_results(mock_empty) == []
 
-    @patch("munin.pipeline.single_model_detector.YOLO")
+    @patch("ultralytics.YOLO")
     def test_results_sorted_by_confidence(
         self, mock_yolo: MagicMock, tmp_path: MagicMock
     ) -> None:
@@ -252,7 +251,7 @@ class TestParseResultsV4:
 class TestDetectionResultV4:
     """Verify DetectionResult structure for v4 classes."""
 
-    @patch("munin.pipeline.single_model_detector.YOLO")
+    @patch("ultralytics.YOLO")
     def test_detection_result_structure(
         self, mock_yolo: MagicMock, tmp_path: MagicMock
     ) -> None:
@@ -287,7 +286,7 @@ class TestDetectionResultV4:
 class TestDetectMethodV4:
     """Verify detect() method integration."""
 
-    @patch("munin.pipeline.single_model_detector.YOLO")
+    @patch("ultralytics.YOLO")
     def test_detect_calls_predict_and_parse(
         self, mock_yolo_class: MagicMock, tmp_path: MagicMock
     ) -> None:
@@ -324,7 +323,7 @@ class TestDetectMethodV4:
             verbose=False,
         )
 
-    @patch("munin.pipeline.single_model_detector.YOLO")
+    @patch("ultralytics.YOLO")
     def test_detect_raises_on_failure(
         self, mock_yolo_class: MagicMock, tmp_path: MagicMock
     ) -> None:

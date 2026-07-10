@@ -47,13 +47,17 @@ class DetectionResult(BaseModel):
         "safety_boots",
         "harness",
         "mask",
-        # Clases negativas (SPEC-v3: dual-class mode)
-        "no_helmet",
+        # Clases negativas (SPEC-v4: dual-class mode, 13 clases)
+        "no_hardhat",
+        "no_safety_vest",
         "no_gloves",
+        "no_safety_boots",
+        "no_safety_glasses",
+        # Clases negativas legacy (SPEC-v3, compatibilidad)
+        "no_helmet",
         "no_vest",
         "no_boots",
         "no_goggle",
-        "no_safety_glasses",
     ] = Field(description="Clase del objeto detectado")
     bbox: tuple[float, float, float, float] = Field(
         description="Bounding box (x1, y1, x2, y2)"
@@ -161,18 +165,25 @@ class AgentDecision(BaseModel):
 
 
 NEGATIVE_CLASS_MAP: dict[str, str] = {
-    "no_helmet": "hardhat",
+    # SPEC-v4 (13 clases)
+    "no_hardhat": "hardhat",
+    "no_safety_vest": "safety_vest",
     "no_gloves": "gloves",
+    "no_safety_boots": "safety_boots",
+    "no_safety_glasses": "safety_glasses",
+    # SPEC-v3 legacy (compatibilidad)
+    "no_helmet": "hardhat",
     "no_vest": "safety_vest",
     "no_boots": "safety_boots",
     "no_goggle": "safety_glasses",
-    "no_safety_glasses": "safety_glasses",
 }
-"""Mapeo de clases negativas a EPP positivo (SPEC-v3 dual-class mode).
+"""Mapeo de clases negativas a EPP positivo (SPEC-v4 dual-class mode).
 
-Ejemplo: si se detecta 'no_helmet', el EPP positivo correspondiente
+Ejemplo: si se detecta 'no_hardhat', el EPP positivo correspondiente
 es 'hardhat'. Se usa en PPEComplianceChecker modo DUAL_CLASS para
 determinar qué EPP falta cuando el modelo detecta una clase negativa.
+
+Incluye nombres v3 legacy para compatibilidad hacia atrás.
 """
 
 

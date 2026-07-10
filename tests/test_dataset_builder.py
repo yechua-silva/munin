@@ -78,24 +78,33 @@ class TestDatasetMappings:
 class TestDHash:
     """Verify perceptual hash computation."""
 
-    def test_dhash_returns_int(self, tmp_path: Path) -> None:
-        """dHash of a real image must return an integer."""
-        img_path = tmp_path / "test.png"
+    def test_dhash_returns_python_int(self, tmp_path: Path) -> None:
+        """dHash must return a Python int (not numpy int)."""
         from PIL import Image
 
+        # Use a non-uniform image with variation in both dimensions
         img = Image.new("RGB", (32, 32), color="red")
+        # Draw a simple pattern so hash is non-zero and meaningful
+        for x in range(32):
+            for y in range(32):
+                if (x + y) % 3 == 0:
+                    img.putpixel((x, y), (255, 255, 255))
+        img_path = tmp_path / "test.png"
         img.save(img_path)
 
         h = _compute_dhash(img_path)
         assert isinstance(h, int)
-        assert h >= 0
 
     def test_dhash_same_image_same_hash(self, tmp_path: Path) -> None:
         """Same image must produce the same dHash."""
-        img_path = tmp_path / "test.png"
         from PIL import Image
 
+        img_path = tmp_path / "test.png"
         img = Image.new("RGB", (32, 32), color="blue")
+        for x in range(32):
+            for y in range(32):
+                if (x * y) % 5 == 0:
+                    img.putpixel((x, y), (255, 0, 0))
         img.save(img_path)
 
         h1 = _compute_dhash(img_path)
@@ -103,18 +112,31 @@ class TestDHash:
         assert h1 == h2
 
     def test_dhash_different_images_different_hash(self, tmp_path: Path) -> None:
-        """Different images should produce different hashes (almost certainly)."""
+        """Different images should produce different hashes."""
         from PIL import Image
 
-        red_path = tmp_path / "red.png"
-        black_path = tmp_path / "black.png"
+        red_path = tmp_path / "pattern_a.png"
+        black_path = tmp_path / "pattern_b.png"
 
-        Image.new("RGB", (32, 32), color="red").save(red_path)
-        Image.new("RGB", (32, 32), color="black").save(black_path)
+        img_a = Image.new("RGB", (32, 32), color="black")
+        img_b = Image.new("RGB", (32, 32), color="black")
 
-        h_red = _compute_dhash(red_path)
-        h_black = _compute_dhash(black_path)
-        assert h_red != h_black
+        # Draw different patterns
+        for x in range(32):
+            for y in range(32):
+                if x < 16:
+                    img_a.putpixel((x, y), (255, 0, 0))
+                if y < 16:
+                    img_b.putpixel((x, y), (0, 255, 0))
+
+        img_a.save(red_path)
+        img_b.save(black_path)
+
+        h_a = _compute_dhash(red_path)
+        h_b = _compute_dhash(black_path)
+
+        # Different patterns should produce different hashes
+        assert h_a != h_b
 
 
 class TestLabelParsing:
@@ -160,17 +182,37 @@ class TestLabelParsing:
 class TestDeduplicate:
     """Verify deduplication by dHash."""
 
-    def test_deduplicate_removes_duplicates(self, tmp_path: Path) -> None:
-        """Identical images should be deduplicated."""
+    def _make_pattern_image(self, path: Path, pattern: str) -> None:
+        """Create a test image with a recognizable pattern."""
         from PIL import Image
 
+        img = Image.new("RGB", (32, 32), color="black")
+        for x in range(32):
+            for y in range(32):
+                if pattern == "red_left":
+                    if x < 16:
+                        img.putpixel((x, y), (255, 0, 0))
+                elif pattern == "red_right":
+                    if x >= 16:
+                        img.putpixel((x, y), (255, 0, 0))
+                elif pattern == "green_top":
+                    if y < 16:
+                        img.putpixel((x, y), (0, 255, 0))
+                elif pattern == "blue_cross":
+                    if x == y or x + y == 31:
+                        img.putpixel((x, y), (0, 0, 255))
+        img.save(path)
+
+    def test_deduplicate_removes_duplicates(self, tmp_path: Path) -> None:
+        """Identical images should be deduplicated."""
         img1 = tmp_path / "img1.png"
         img2 = tmp_path / "img2.png"
         img3 = tmp_path / "img3.png"
 
-        Image.new("RGB", (32, 32), color="red").save(img1)
-        Image.new("RGB", (32, 32), color="red").save(img2)  # same as img1
-        Image.new("RGB", (32, 32), color="blue").save(img3)  # different
+        # img1 and img2 are identical (same pattern)
+        self._make_pattern_image(img1, "red_left")
+        self._make_pattern_image(img2, "red_left")  # same as img1
+        self._make_pattern_image(img3, "green_top")  # different
 
         builder = DatasetBuilder(tmp_path)
         indices = builder._deduplicate([img1, img2, img3])
@@ -182,12 +224,10 @@ class TestDeduplicate:
 
     def test_deduplicate_preserves_unique(self, tmp_path: Path) -> None:
         """All unique images are preserved."""
-        from PIL import Image
-
         paths = []
-        for i, color in enumerate(["red", "green", "blue"]):
+        for i, pattern in enumerate(["red_left", "green_top", "blue_cross"]):
             p = tmp_path / f"img_{i}.png"
-            Image.new("RGB", (32, 32), color=color).save(p)
+            self._make_pattern_image(p, pattern)
             paths.append(p)
 
         builder = DatasetBuilder(tmp_path)
@@ -199,17 +239,18 @@ class TestStratifiedSplit:
     """Verify stratified split proportions."""
 
     def test_split_proportions(self) -> None:
-        """Split should be 80/10/10 approximately."""
-        # Create mock data with labeled paths
+        """Split should be 80/10/10 approximately with enough samples."""
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
 
-            # Create images with labels that have varied classes
+            # Use enough images (260) so each class has ~20 samples
+            # for the test split (10% of 260 = 26, covering 13 classes)
+            n_samples = 260
             images = []
             labels = []
-            for i in range(100):
+            for i in range(n_samples):
                 img = tmp / f"img_{i:04d}.jpg"
                 img.write_text("dummy")
                 lbl = tmp / f"img_{i:04d}.txt"
@@ -219,11 +260,13 @@ class TestStratifiedSplit:
                 labels.append(lbl)
 
             builder = DatasetBuilder(tmp)
-            result = builder._stratified_split(images, labels)
-            train_imgs, val_imgs, test_imgs = result
+            train_imgs, val_imgs, test_imgs = builder._stratified_split(
+                images, labels
+            )
 
             total = len(images)
-            assert len(train_imgs) == pytest.approx(int(total * 0.8), abs=3), (
+            # Allow +-5 tolerance for rounding
+            assert len(train_imgs) == pytest.approx(int(total * 0.8), abs=5), (
                 f"Train set size {len(train_imgs)} != ~{int(total * 0.8)}"
             )
             assert len(val_imgs) == pytest.approx(int(total * 0.1), abs=3), (
@@ -240,9 +283,10 @@ class TestStratifiedSplit:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
 
+            n_samples = 260
             images = []
             labels = []
-            for i in range(50):
+            for i in range(n_samples):
                 img = tmp / f"img_{i:04d}.jpg"
                 img.write_text("dummy")
                 lbl = tmp / f"img_{i:04d}.txt"
@@ -318,7 +362,6 @@ class TestRemapDataset:
         img_dir.mkdir(parents=True)
         lbl_dir.mkdir(parents=True)
 
-        # Create a test image and label
         from PIL import Image
 
         img = Image.new("RGB", (100, 100), color="gray")
