@@ -1,7 +1,7 @@
-"""VLM layer — clientes de Vision Language Model (Strategy Pattern).
+"""VLM layer — modelos de Vision Language Model via PydanticAI Agents.
 
 Soporta múltiples backends:
-- FireworksVLMClient: Fireworks AI API (interim, cloud)
-- AMDvLLMClient: AMD MI300X via vLLM ROCm (target, on-premise)
-- VLMClientFactory: Factory para crear el backend correcto según config
+- FireworksProvider: Fireworks AI API (interim, cloud)
+- AMDvLLMProvider: AMD MI300X via vLLM ROCm (target, on-premise)
+- VLMModelFactory: Factory para crear el backend correcto según config
 """

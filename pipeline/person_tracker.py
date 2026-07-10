@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
+
+import numpy as np
 
 from munin.exceptions import TrackingError
 from munin.gate.schemas import DetectionResult, TrackedPerson
+
+if TYPE_CHECKING:
+    from munin.pipeline.interfaces import IDetector
 
 logger = logging.getLogger(__name__)
 
@@ -78,24 +84,66 @@ class PersonTracker:
         _logger: Logger de la clase.
     """
 
-    def __init__(self, iou_threshold: float = 0.3, max_lost: int = 5) -> None:
+    def __init__(
+        self,
+        iou_threshold: float = 0.3,
+        max_lost: int = 5,
+        detector: "IDetector | None" = None,
+    ) -> None:
         """Inicializa PersonTracker.
 
         Args:
             iou_threshold: IoU mínimo para considerar mismo ID (default: 0.3).
             max_lost: Frames máximos sin detección antes de descartar
                 una track (default: 5).
+            detector: Detector opcional para soportar ITracker v3
+                (update(frame: np.ndarray)). Si es None, usa
+                update(detections: list) legacy.
         """
         self._iou_threshold: float = iou_threshold
         self._max_lost: int = max_lost
+        self._detector: "IDetector | None" = detector
         self._next_id: int = 0
         self._tracks: dict[int, TrackedPerson] = {}
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def update(
+        self, frame: "np.ndarray | list[DetectionResult]"
+    ) -> list[TrackedPerson]:
+        """Actualiza el tracking con un frame o lista de detecciones.
+
+        v3: Si recibe np.ndarray (frame), usa el detector interno para
+        obtener detecciones. Si recibe list[DetectionResult], mantiene
+        comportamiento legacy (compatibilidad hacia atrás).
+
+        Args:
+            frame: Frame np.ndarray HWC BGR uint8, o lista de DetectionResult
+                   (legacy compat).
+
+        Returns:
+            Lista de TrackedPerson activas.
+
+        Raises:
+            TrackingError: Si hay error en el cálculo de IoU.
+        """
+        if isinstance(frame, np.ndarray) and self._detector is not None:
+            detections = self._detector.detect(frame)
+        elif isinstance(frame, list):
+            # Legacy: frame es en realidad list[DetectionResult]
+            detections = frame
+        else:
+            self._logger.warning(
+                "PersonTracker.update: no detector and frame is not list, "
+                "returning empty tracks"
+            )
+            return []
+
+        return self._update_from_detections(detections)
+
+    def _update_from_detections(
         self, detections: list[DetectionResult]
     ) -> list[TrackedPerson]:
-        """Actualiza el tracking con detecciones del frame actual.
+        """Lógica de tracking desde detecciones (migrado de update v2).
 
         Paso a paso:
         1. Separa detecciones en persons (person) y ppe_items (resto).

@@ -136,6 +136,11 @@ class Pipeline:
             zone.nombre,
         )
 
+        # Verificar si stream mode está activado
+        if hasattr(self._settings, 'yolo_stream_mode') and self._settings.yolo_stream_mode:
+            self._logger.info("Stream mode enabled, using _process_stream()")
+            return await self._process_stream(video_path, zone_id)
+
         # 2. Extraer frames del video
         frames: list[np.ndarray] = self._extractor.extract(video_path)
         self._logger.info(
@@ -158,11 +163,11 @@ class Pipeline:
                 if self._callbacks and self._callbacks.on_detection:
                     self._callbacks.on_detection(detections)
 
-                # c. Actualizar tracking con nuevas detecciones
-                persons = self._tracker.update(detections)
+                # c. Actualizar tracking con el frame completo
+                persons = self._tracker.update(frame)
 
                 # d. Verificar compliance EPP contra la zona
-                violations: list[Violation] = self._checker.check(persons, zone)
+                violations: list[Violation] = self._checker.check(persons, detections, zone)
 
                 # e. Callback on_violation
                 if self._callbacks and self._callbacks.on_violation:
@@ -193,6 +198,81 @@ class Pipeline:
             "Pipeline complete: %d frames processed, "
             "%d decisions generated for zone '%s'",
             len(frames),
+            len(all_decisions),
+            zone_id,
+        )
+
+        return all_decisions
+
+    async def _process_stream(
+        self,
+        video_path: str,
+        zone_id: str = "extraccion",
+    ) -> list[AgentDecision]:
+        """Procesa video en modo streaming (YOLO gestiona frames).
+
+        Usa detector.detect_stream() para iterar frames. Por cada frame
+        del stream, obtiene el frame crudo via extractor para tracker y VLM.
+
+        Args:
+            video_path: Ruta al video MP4.
+            zone_id: ID de la zona minera.
+
+        Returns:
+            Lista de AgentDecision acumuladas.
+        """
+        zone: Zone = self._zone_config.get_zone(zone_id)
+        self._logger.info(
+            "Processing video (stream mode): %s | zone: %s",
+            video_path,
+            zone_id,
+        )
+
+        all_decisions: list[AgentDecision] = []
+        frame_idx = 0
+
+        for detections in self._detector.detect_stream(video_path):
+            frame_idx += 1
+            self._logger.debug(
+                "Stream frame %d: %d detections", frame_idx, len(detections)
+            )
+
+            try:
+                # Callback on_detection
+                if self._callbacks and self._callbacks.on_detection:
+                    self._callbacks.on_detection(detections)
+
+                # Tracker usa frame — pero en stream mode no tenemos frame crudo
+                # directamente. Usar tracker con detections (legacy compat)
+                # PersonTracker.update acepta list[DetectionResult] como fallback
+                persons = self._tracker.update(detections)
+
+                # Checker con 3 params
+                violations = self._checker.check(persons, detections, zone)
+
+                if self._callbacks and self._callbacks.on_violation:
+                    self._callbacks.on_violation(violations)
+
+                if violations:
+                    # En stream mode no tenemos frame crudo para VLM
+                    # Crear decisiones por defecto
+                    for violation in violations:
+                        all_decisions.append(self._default_busy_decision(violation))
+
+                if self._callbacks and self._callbacks.on_decision:
+                    self._callbacks.on_decision(all_decisions)
+
+            except Exception as e:
+                self._logger.warning(
+                    "Error processing stream frame %d: %s. Skipping.",
+                    frame_idx,
+                    e,
+                )
+                continue
+
+        self._logger.info(
+            "Stream pipeline complete: %d frames, %d decisions for zone '%s'",
+            frame_idx,
             len(all_decisions),
             zone_id,
         )

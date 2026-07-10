@@ -58,7 +58,7 @@ class AgentConfig(BaseModel):
         temperature: Temperatura del LLM (baja = más determinístico).
     """
 
-    timeout: float = Field(default=30.0, description="Timeout por llamada VLM")
+    timeout: float = Field(default=300.0, description="Timeout por llamada VLM (300s para reasoning extendido)")
     max_retries: int = Field(default=3, description="Intentos máximos del Gate")
     temperature: float = Field(default=0.1, description="Temperatura del LLM")
 
@@ -84,6 +84,13 @@ class AppSettings(BaseSettings):
         ds132_kb_path: Ruta al knowledge base DS 132.
         zones_config_path: Ruta al archivo de configuración de zonas.
         log_level: Nivel de logging.
+        compliance_mode: Modo de compliance EPP (legacy | dual_class).
+        yolo_stream_mode: Usar stream=True en YOLO.
+        yolo_imgsz: Tamaño de entrada YOLO (320-1280).
+        frame_resize_width: Ancho de resize para VLM.
+        frame_resize_height: Alto de resize para VLM.
+        prompt_cache_session_id: Session ID para prompt caching en Fireworks.
+        yolo_ppe_model_path: Ruta al modelo Construction-PPE fine-tuned.
     """
 
     # VLM Backend
@@ -111,7 +118,51 @@ class AppSettings(BaseSettings):
     # Pipeline
     frame_rate: int = Field(default=25)
     min_consecutive_frames: int = Field(default=3)
-    vlm_busy_timeout: float = Field(default=30.0)
+    vlm_busy_timeout: float = Field(
+        default=300.0,
+        description="Timeout VLM en segundos (300s = 5 min para reasoning extendido)",
+    )
+
+    # Compliance mode (SPEC-v3)
+    compliance_mode: str = Field(
+        default="legacy",
+        description="Modo de compliance EPP: 'legacy' (6 clases) o 'dual_class' (11 clases)",
+    )
+
+    # YOLO stream mode (SPEC-v3)
+    yolo_stream_mode: bool = Field(
+        default=False,
+        description="Usar stream=True en YOLO (gestión interna de frames)",
+    )
+
+    # YOLO image size (SPEC-v3)
+    yolo_imgsz: int = Field(
+        default=640,
+        ge=320, le=1280,
+        description="Tamaño de entrada YOLO (imgsz)",
+    )
+
+    # Frame resize para VLM (ADR-016)
+    frame_resize_width: int = Field(
+        default=640,
+        description="Ancho de redimension para VLM",
+    )
+    frame_resize_height: int = Field(
+        default=480,
+        description="Alto de redimension para VLM",
+    )
+
+    # Prompt cache session (ADR-015)
+    prompt_cache_session_id: str = Field(
+        default="munin-session",
+        description="Session ID para caching de prompts (x-session-affinity)",
+    )
+
+    # Construction-PPE model path (DUAL_CLASS mode)
+    yolo_ppe_model_path: str = Field(
+        default="/scratch/runs/detect/train/weights/best.pt",
+        description="Ruta al modelo Construction-PPE fine-tuned (11 clases)",
+    )
 
     # Knowledge
     ds132_kb_path: str = Field(default="./knowledge/ds132_kb.json")

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai import ModelSettings
@@ -11,6 +10,16 @@ from munin.exceptions import ConfigurationError
 
 logger = logging.getLogger(__name__)
 
+SHARED_BASE_SYSTEM_PROMPT: str = (
+    "Eres Munin, un asistente de seguridad industrial especializado en "
+    "normativa chilena DS 132. Tu rol es analizar imágenes de trabajadores "
+    "en faenas mineras y detectar incumplimientos de EPP (Elementos de "
+    "Protección Personal).\n\n"
+    "Debes responder ESTRICTAMENTE en el formato JSON solicitado. "
+    "No agregues texto adicional fuera del JSON. "
+    "Sé preciso y objetivo en tus evaluaciones."
+)
+
 
 class VLMModelFactory:
     """Factory para crear el modelo VLM según configuración.
@@ -18,13 +27,17 @@ class VLMModelFactory:
     Usa PydanticAI con FireworksProvider o OpenAIProvider (para AMD vLLM).
     Strategy Pattern: el backend se selecciona via AppSettings.vlm_backend.
 
+    ADR-015: SHARED_BASE_SYSTEM_PROMPT se usa como prefijo en los prompts
+    de cada agente para maximizar cache hits en Fireworks (83% descuento
+    en tokens de prompt cacheados).
+
     Attributes:
         _settings: Configuración de la aplicación.
     """
 
     @staticmethod
     def create(settings: AppSettings) -> OpenAIChatModel:
-        """Crea el modelo VLM apropiado.
+        """Crea el modelo VLM apropiado con session affinity.
 
         Args:
             settings: Configuración de la aplicación.
@@ -42,16 +55,23 @@ class VLMModelFactory:
                     "Set MUNIN_FIREWORKS_API_KEY in .env"
                 )
             from pydantic_ai.providers.fireworks import FireworksProvider
+            from openai import AsyncOpenAI
 
             logger.info(
-                "Creating Fireworks VLM model: %s",
+                "Creating Fireworks VLM model: %s (session: %s)",
                 settings.fireworks_model,
+                settings.prompt_cache_session_id,
+            )
+            client = AsyncOpenAI(
+                api_key=settings.fireworks_api_key,
+                timeout=settings.vlm_busy_timeout,
+                default_headers={
+                    "x-session-affinity": settings.prompt_cache_session_id,
+                },
             )
             return OpenAIChatModel(
                 settings.fireworks_model,
-                provider=FireworksProvider(
-                    api_key=settings.fireworks_api_key,
-                ),
+                provider=FireworksProvider(openai_client=client),
                 settings=ModelSettings(max_tokens=8192),
             )
 
@@ -67,6 +87,7 @@ class VLMModelFactory:
             client = AsyncOpenAI(
                 base_url=settings.amd_vllm_endpoint,
                 api_key="dummy",
+                timeout=settings.vlm_busy_timeout,
             )
             return OpenAIChatModel(
                 settings.amd_model,
@@ -80,4 +101,4 @@ class VLMModelFactory:
         )
 
 
-__all__ = ["VLMModelFactory"]
+__all__ = ["VLMModelFactory", "SHARED_BASE_SYSTEM_PROMPT"]

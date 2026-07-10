@@ -6,11 +6,13 @@ from munin.gate.schemas import Violation
 
 
 class AgentContext(BaseModel):
-    """Contexto compartido entre agentes VLM.
+    """Contexto compartido entre agentes VLM (DataClass Pattern).
 
-    Se construye en el MuninOrchestrator y se pasa secuencialmente
-    entre los agentes. Cada agente puede agregar su output
-    al contexto para que el siguiente lo use.
+    Patrón: DataClass (Pydantic BaseModel), NO ABC/Template Method.
+    Es un DTO (Data Transfer Object) que se construye en el
+    MuninOrchestrator y se pasa secuencialmente entre los agentes.
+    Cada agente puede agregar su output al contexto para que el
+    siguiente lo use. No hay herencia ni métodos abstractos.
 
     Attributes:
         violation: Violación detectada por el rule engine.

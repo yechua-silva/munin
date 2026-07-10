@@ -64,16 +64,6 @@ class TestImports:
         from munin.pipeline.yolo_detector import YOLODetector
         assert YOLODetector is not None
 
-    def test_import_vlm_client(self) -> None:
-        """vlm/client.py importa sin error."""
-        from munin.vlm.client import VLMClient
-        assert VLMClient is not None
-
-    def test_import_fireworks_client(self) -> None:
-        """vlm/fireworks_client.py (deprecated) aún importa sin error."""
-        from munin.vlm.fireworks_client import FireworksVLMClient
-        assert FireworksVLMClient is not None
-
     def test_import_factory(self) -> None:
         """vlm/factory.py importa VLMModelFactory sin error."""
         from munin.vlm.factory import VLMModelFactory
@@ -249,7 +239,7 @@ class TestConfig:
         """AgentConfig tiene defaults sensatos."""
         from munin.config import AgentConfig
         config = AgentConfig()
-        assert config.timeout == 30.0
+        assert config.timeout == 300.0
         assert config.max_retries == 3
         assert config.temperature == 0.1
 
@@ -257,10 +247,19 @@ class TestConfig:
         """AppSettings carga con defaults (sin .env)."""
         from munin.config import AppSettings, VLMBackend
         # AppSettings puede cargar sin .env porque todos los campos tienen defaults
-        settings = AppSettings()
+        settings = AppSettings(_env_file=None)
         assert settings.vlm_backend == VLMBackend.FIREWORKS
         assert settings.frame_rate == 25
         assert settings.min_consecutive_frames == 3
+        # Nuevos campos v3
+        assert settings.compliance_mode == "legacy"
+        assert settings.yolo_stream_mode is False
+        assert settings.yolo_imgsz == 640
+        assert settings.frame_resize_width == 640
+        assert settings.frame_resize_height == 480
+        assert settings.prompt_cache_session_id == "munin-session"
+        assert settings.yolo_ppe_model_path == "/scratch/runs/detect/train/weights/best.pt"
+        assert settings.vlm_busy_timeout == 300.0
 
 
 # ============================================================================

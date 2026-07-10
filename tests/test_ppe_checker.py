@@ -101,6 +101,56 @@ def person_with_full_epp() -> TrackedPerson:
 
 
 # ============================================================================
+# FIXTURES V3 (nueva signature + dual-class mode)
+# ============================================================================
+
+
+@pytest.fixture
+def detections_with_epp() -> list:
+    """Detecciones con 1 persona + hardhat dentro de su bbox."""
+    from munin.gate.schemas import DetectionResult
+
+    return [
+        DetectionResult(class_name="person", bbox=(100.0, 200.0, 300.0, 500.0), confidence=0.9),
+        DetectionResult(class_name="hardhat", bbox=(150.0, 180.0, 250.0, 250.0), confidence=0.85),
+    ]
+
+
+@pytest.fixture
+def detections_with_negative_classes() -> list:
+    """Detecciones con no_helmet y no_vest."""
+    from munin.gate.schemas import DetectionResult
+
+    return [
+        DetectionResult(class_name="person", bbox=(100.0, 200.0, 300.0, 500.0), confidence=0.9),
+        DetectionResult(class_name="no_helmet", bbox=(150.0, 180.0, 250.0, 250.0), confidence=0.80),
+        DetectionResult(class_name="no_vest", bbox=(120.0, 260.0, 280.0, 350.0), confidence=0.75),
+    ]
+
+
+@pytest.fixture
+def detections_no_ppe() -> list:
+    """Solo detección de persona, sin EPP."""
+    from munin.gate.schemas import DetectionResult
+
+    return [
+        DetectionResult(class_name="person", bbox=(100.0, 200.0, 300.0, 500.0), confidence=0.9),
+    ]
+
+
+@pytest.fixture
+def person_no_epp() -> TrackedPerson:
+    """Persona sin EPP detectado (epp_detectado vacío)."""
+    return TrackedPerson(
+        persona_id=1,
+        bbox=(100.0, 200.0, 300.0, 500.0),
+        epp_detectado=set(),
+        lost_counter=0,
+        consecutive_violations=0,
+    )
+
+
+# ============================================================================
 # TESTS
 # ============================================================================
 
@@ -116,15 +166,16 @@ class TestPPEComplianceChecker:
         person_without_hardhat: TrackedPerson,
     ) -> None:
         """Persona sin hardhat en zona extracción → violación con hardhat faltante."""
-        from munin.pipeline.ppe_checker import PPEComplianceChecker
+        from munin.pipeline.ppe_checker import ComplianceMode, PPEComplianceChecker
 
         checker = PPEComplianceChecker(
             zone_config=mock_zone_config,
             ds132_kb=mock_ds132_kb,
+            mode=ComplianceMode.LEGACY,
         )
         persons = [person_without_hardhat]
 
-        violations = checker.check(persons, extraccion_zone)
+        violations = checker.check(persons, detections=[], zone=extraccion_zone)
 
         assert len(violations) == 1
         violation = violations[0]
@@ -151,15 +202,16 @@ class TestPPEComplianceChecker:
         person_without_harness: TrackedPerson,
     ) -> None:
         """Persona sin harness en zona riesgo_base='alto' → violación arnés (ADR-008)."""
-        from munin.pipeline.ppe_checker import PPEComplianceChecker
+        from munin.pipeline.ppe_checker import ComplianceMode, PPEComplianceChecker
 
         checker = PPEComplianceChecker(
             zone_config=mock_zone_config,
             ds132_kb=mock_ds132_kb,
+            mode=ComplianceMode.LEGACY,
         )
         persons = [person_without_harness]
 
-        violations = checker.check(persons, alto_zone)
+        violations = checker.check(persons, detections=[], zone=alto_zone)
 
         assert len(violations) == 1
         violation = violations[0]
@@ -186,15 +238,16 @@ class TestPPEComplianceChecker:
         person_with_full_epp: TrackedPerson,
     ) -> None:
         """Persona con todo el EPP requerido → lista vacía (compliance OK)."""
-        from munin.pipeline.ppe_checker import PPEComplianceChecker
+        from munin.pipeline.ppe_checker import ComplianceMode, PPEComplianceChecker
 
         checker = PPEComplianceChecker(
             zone_config=mock_zone_config,
             ds132_kb=mock_ds132_kb,
+            mode=ComplianceMode.LEGACY,
         )
         persons = [person_with_full_epp]
 
-        violations = checker.check(persons, extraccion_zone)
+        violations = checker.check(persons, detections=[], zone=extraccion_zone)
 
         assert len(violations) == 0
 
@@ -205,14 +258,15 @@ class TestPPEComplianceChecker:
         extraccion_zone: Zone,
     ) -> None:
         """Sin personas trackeadas → lista vacía (no error)."""
-        from munin.pipeline.ppe_checker import PPEComplianceChecker
+        from munin.pipeline.ppe_checker import ComplianceMode, PPEComplianceChecker
 
         checker = PPEComplianceChecker(
             zone_config=mock_zone_config,
             ds132_kb=mock_ds132_kb,
+            mode=ComplianceMode.LEGACY,
         )
 
-        violations = checker.check([], extraccion_zone)
+        violations = checker.check([], detections=[], zone=extraccion_zone)
 
         assert len(violations) == 0
 
@@ -225,15 +279,16 @@ class TestPPEComplianceChecker:
         person_with_full_epp: TrackedPerson,
     ) -> None:
         """Múltiples personas: una sin hardhat, otra con todo → 1 violación."""
-        from munin.pipeline.ppe_checker import PPEComplianceChecker
+        from munin.pipeline.ppe_checker import ComplianceMode, PPEComplianceChecker
 
         checker = PPEComplianceChecker(
             zone_config=mock_zone_config,
             ds132_kb=mock_ds132_kb,
+            mode=ComplianceMode.LEGACY,
         )
         persons = [person_without_hardhat, person_with_full_epp]
 
-        violations = checker.check(persons, extraccion_zone)
+        violations = checker.check(persons, detections=[], zone=extraccion_zone)
 
         assert len(violations) == 1
         assert violations[0].persona_id == 1
@@ -245,7 +300,7 @@ class TestPPEComplianceChecker:
         extraccion_zone: Zone,
     ) -> None:
         """Persona sin múltiples EPP en extracción → todas las faltantes."""
-        from munin.pipeline.ppe_checker import PPEComplianceChecker
+        from munin.pipeline.ppe_checker import ComplianceMode, PPEComplianceChecker
 
         # Persona sin hardhat, safety_vest, ni safety_boots
         person = TrackedPerson(
@@ -259,9 +314,10 @@ class TestPPEComplianceChecker:
         checker = PPEComplianceChecker(
             zone_config=mock_zone_config,
             ds132_kb=mock_ds132_kb,
+            mode=ComplianceMode.LEGACY,
         )
 
-        violations = checker.check([person], extraccion_zone)
+        violations = checker.check([person], detections=[], zone=extraccion_zone)
 
         assert len(violations) == 1
         violation = violations[0]
@@ -273,3 +329,111 @@ class TestPPEComplianceChecker:
         # faltan: hardhat, safety_vest, safety_boots
         assert epp_faltante_tipos == {"hardhat", "safety_vest", "safety_boots"}
         assert len(violation.epp_faltantes) == 3
+
+
+class TestPPEComplianceCheckerV3:
+    """Tests v3 para nueva signature + dual_class mode."""
+
+    def test_check_new_signature_three_params(
+        self,
+        mock_zone_config: Mock,
+        mock_ds132_kb: Mock,
+        extraccion_zone: Zone,
+        person_no_epp: TrackedPerson,
+        detections_no_ppe: list,
+    ) -> None:
+        """check() acepta 3 parámetros: persons, detections, zone."""
+        from munin.pipeline.ppe_checker import ComplianceMode, PPEComplianceChecker
+
+        checker = PPEComplianceChecker(
+            zone_config=mock_zone_config,
+            ds132_kb=mock_ds132_kb,
+            mode=ComplianceMode.LEGACY,
+        )
+        # No debe lanzar error con 3 params
+        violations = checker.check(
+            [person_no_epp],
+            detections=detections_no_ppe,
+            zone=extraccion_zone,
+        )
+        assert isinstance(violations, list)
+
+    def test_assign_epp_to_persons(
+        self,
+        mock_zone_config: Mock,
+        mock_ds132_kb: Mock,
+        extraccion_zone: Zone,
+        person_no_epp: TrackedPerson,
+        detections_with_epp: list,
+    ) -> None:
+        """_assign_epp_to_persons asigna EPP dentro de bbox de persona."""
+        from munin.pipeline.ppe_checker import ComplianceMode, PPEComplianceChecker
+
+        checker = PPEComplianceChecker(
+            zone_config=mock_zone_config,
+            ds132_kb=mock_ds132_kb,
+            mode=ComplianceMode.LEGACY,
+        )
+        persons = [person_no_epp]
+        checker.check(persons, detections=detections_with_epp, zone=extraccion_zone)
+
+        # Después de check, person_no_epp debe tener hardhat en epp_detectado
+        # porque el hardhat bbox está dentro del person bbox
+        assert "hardhat" in persons[0].epp_detectado
+
+    def test_dual_class_negative_detection(
+        self,
+        mock_zone_config: Mock,
+        mock_ds132_kb: Mock,
+        extraccion_zone: Zone,
+        person_no_epp: TrackedPerson,
+        detections_with_negative_classes: list,
+    ) -> None:
+        """DUAL_CLASS: no_helmet detectado → violation hardhat."""
+        from munin.pipeline.ppe_checker import ComplianceMode, PPEComplianceChecker
+
+        checker = PPEComplianceChecker(
+            zone_config=mock_zone_config,
+            ds132_kb=mock_ds132_kb,
+            mode=ComplianceMode.DUAL_CLASS,
+        )
+        violations = checker.check(
+            [person_no_epp],
+            detections=detections_with_negative_classes,
+            zone=extraccion_zone,
+        )
+
+        assert len(violations) >= 1
+        # no_helmet → hardhat faltante
+        all_faltantes = set()
+        for v in violations:
+            for e in v.epp_faltantes:
+                all_faltantes.add(e.tipo)
+        assert "hardhat" in all_faltantes
+
+    def test_dual_class_no_negative_no_positive(
+        self,
+        mock_zone_config: Mock,
+        mock_ds132_kb: Mock,
+        extraccion_zone: Zone,
+        person_no_epp: TrackedPerson,
+        detections_no_ppe: list,
+    ) -> None:
+        """DUAL_CLASS: sin detección negativa ni positiva → violation legacy."""
+        from munin.pipeline.ppe_checker import ComplianceMode, PPEComplianceChecker
+
+        checker = PPEComplianceChecker(
+            zone_config=mock_zone_config,
+            ds132_kb=mock_ds132_kb,
+            mode=ComplianceMode.DUAL_CLASS,
+        )
+        violations = checker.check(
+            [person_no_epp],
+            detections=detections_no_ppe,
+            zone=extraccion_zone,
+        )
+
+        # Sin EPP detectado ni clases negativas → violación por todos los required
+        assert len(violations) == 1
+        epp_faltante_tipos = {e.tipo for e in violations[0].epp_faltantes}
+        assert "hardhat" in epp_faltante_tipos

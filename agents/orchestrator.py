@@ -31,6 +31,8 @@ class MuninOrchestrator:
         _scorer: Agente scorer con output AgentDecision.
         _single_pass: Agente fallback.
         _timeout: Timeout por violación en segundos.
+        _resize_width: Ancho de redimension para VLM (default 640).
+        _resize_height: Alto de redimension para VLM (default 480).
     """
 
     def __init__(
@@ -39,7 +41,9 @@ class MuninOrchestrator:
         analyzer: Agent[None, AnalysisResult],
         scorer: Agent[None, AgentDecision],
         single_pass: Agent[None, AgentDecision],
-        timeout: float = 30.0,
+        timeout: float = 300.0,
+        resize_width: int = 640,
+        resize_height: int = 480,
     ) -> None:
         """Inicializa el orquestador con los 4 agentes.
 
@@ -49,24 +53,32 @@ class MuninOrchestrator:
             scorer: Agente de scoring DS 132.
             single_pass: Agente de fallback (prompt fusionado).
             timeout: Timeout por violación en segundos.
+            resize_width: Ancho de redimension para VLM (default 640).
+            resize_height: Alto de redimension para VLM (default 480).
         """
         self._extractor = extractor
         self._analyzer = analyzer
         self._scorer = scorer
         self._single_pass = single_pass
         self._timeout = timeout
+        self._resize_width = resize_width
+        self._resize_height = resize_height
 
     @classmethod
     def from_model(
         cls,
         model: OpenAIChatModel,
-        timeout: float = 30.0,
+        timeout: float = 300.0,
+        resize_width: int = 640,
+        resize_height: int = 480,
     ) -> MuninOrchestrator:
         """Crea el orquestador con todos los agentes desde un modelo.
 
         Args:
             model: Modelo VLM configurado.
             timeout: Timeout por violación.
+            resize_width: Ancho de redimension para VLM (default 640).
+            resize_height: Alto de redimension para VLM (default 480).
 
         Returns:
             MuninOrchestrator listo para usar.
@@ -77,6 +89,8 @@ class MuninOrchestrator:
             scorer=create_scorer_agent(model),
             single_pass=create_single_pass_agent(model),
             timeout=timeout,
+            resize_width=resize_width,
+            resize_height=resize_height,
         )
 
     async def analyze(
@@ -109,9 +123,8 @@ class MuninOrchestrator:
             len(violations),
         )
 
-        # Codificar frame a JPEG bytes para BinaryContent
-        _, buffer = cv.imencode(".jpg", frame, [cv.IMWRITE_JPEG_QUALITY, 85])
-        jpeg_bytes = buffer.tobytes()
+        # Codificar frame a JPEG bytes (con resize 640×480 ADR-016)
+        jpeg_bytes = self._encode_jpeg(frame)
 
         decisions: list[AgentDecision] = []
         for violation in violations:
@@ -265,6 +278,42 @@ class MuninOrchestrator:
             decision.confianza,
         )
         return decision
+
+    def _resize_frame(self, frame: np.ndarray) -> np.ndarray:
+        """Redimensiona frame a configured size con INTER_AREA.
+
+        ADR-016: resize 640×480 antes de VLM para reducir latencia
+        y consumo de tokens. INTER_AREA es óptimo para downscaling.
+
+        Args:
+            frame: Frame original (HWC BGR uint8).
+
+        Returns:
+            Frame redimensionado a (resize_width × resize_height).
+        """
+        return cv.resize(
+            frame,
+            (self._resize_width, self._resize_height),
+            interpolation=cv.INTER_AREA,
+        )
+
+    def _encode_jpeg(self, frame: np.ndarray, quality: int = 85) -> bytes:
+        """Redimensiona y codifica frame como JPEG.
+
+        Combina resize + imencode en un solo paso.
+
+        Args:
+            frame: Frame original (HWC BGR uint8).
+            quality: Calidad JPEG (1-100, default 85).
+
+        Returns:
+            JPEG bytes para BinaryContent.
+        """
+        resized = self._resize_frame(frame)
+        _, buffer = cv.imencode(
+            ".jpg", resized, [cv.IMWRITE_JPEG_QUALITY, quality]
+        )
+        return buffer.tobytes()
 
     def _default_decision(self, violation: Violation) -> AgentDecision:
         """Decisión por defecto cuando todo falla.

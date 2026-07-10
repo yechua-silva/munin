@@ -7,11 +7,21 @@ from tempfile import NamedTemporaryFile
 
 import streamlit as st
 
+import numpy as np
+
 from munin.config import AppSettings
-from munin.gate.schemas import AgentDecision
+from munin.gate.schemas import AgentDecision, DetectionResult, TrackedPerson, Violation
 from munin.pipeline.factory import PipelineFactory
 
 logger = logging.getLogger(__name__)
+
+try:
+    import supervision as sv
+
+    SUPERVISION_AVAILABLE = True
+except ImportError:
+    SUPERVISION_AVAILABLE = False
+    logger.warning("supervision not installed, annotation features disabled")
 
 
 class StreamlitDashboard:
@@ -132,6 +142,113 @@ class StreamlitDashboard:
             Path(temp_path).unlink(missing_ok=True)
 
     # ------------------------------------------------------------------
+    # Anotación de frames con supervision
+    # ------------------------------------------------------------------
+
+    def _annotate_frame(
+        self,
+        frame: np.ndarray,
+        detections: list[DetectionResult],
+        persons: list[TrackedPerson] | None = None,
+        violations: list[Violation] | None = None,
+    ) -> np.ndarray:
+        """Anota un frame con bounding boxes, labels y traces usando supervision.
+
+        ADR-019: Supervision se usa SOLO en dashboard, no en pipeline.
+
+        Args:
+            frame: Frame original (HWC BGR uint8).
+            detections: Detecciones de YOLO en el frame.
+            persons: Personas trackeadas con IDs (opcional).
+            violations: Violaciones detectadas (opcional).
+
+        Returns:
+            Frame anotado con bounding boxes, labels y traces.
+        """
+        if not SUPERVISION_AVAILABLE:
+            return frame
+
+        # Convertir DetectionResult → sv.Detections
+        if not detections:
+            return frame
+
+        xyxy = np.array([d.bbox for d in detections], dtype=np.float32)
+        confidence = np.array([d.confidence for d in detections], dtype=np.float32)
+        class_names = np.array([d.class_name for d in detections])
+
+        sv_detections = sv.Detections(
+            xyxy=xyxy,
+            confidence=confidence,
+            class_id=np.arange(len(detections)),
+            data={"class_name": class_names},
+        )
+
+        # Añadir tracker_id si hay persons
+        if persons:
+            tracker_ids = []
+            for det in detections:
+                # Match por bbox closest person
+                best_id = -1
+                best_iou = 0.0
+                for person in persons:
+                    iou = self._compute_iou(det.bbox, person.bbox)
+                    if iou > best_iou:
+                        best_iou = iou
+                        best_id = person.persona_id
+                tracker_ids.append(best_id if best_iou > 0.3 else -1)
+            sv_detections.tracker_id = np.array(tracker_ids)
+
+        # Annotators
+        annotated = frame.copy()
+
+        # BoxAnnotator
+        box_annotator = sv.BoxAnnotator()
+        annotated = box_annotator.annotate(annotated, sv_detections)
+
+        # LabelAnnotator
+        labels = [
+            f"{d.class_name} {d.confidence:.2f}"
+            for d in detections
+        ]
+        label_annotator = sv.LabelAnnotator()
+        annotated = label_annotator.annotate(
+            annotated, sv_detections, labels=labels
+        )
+
+        # TraceAnnotator si hay tracker_ids
+        if persons and hasattr(sv, 'TraceAnnotator'):
+            trace_annotator = sv.TraceAnnotator()
+            annotated = trace_annotator.annotate(annotated, sv_detections)
+
+        return annotated
+
+    @staticmethod
+    def _compute_iou(
+        bbox_a: tuple[float, float, float, float],
+        bbox_b: tuple[float, float, float, float],
+    ) -> float:
+        """Calcula IoU entre dos bboxes.
+
+        Args:
+            bbox_a: Primer bounding box (x1, y1, x2, y2).
+            bbox_b: Segundo bounding box (x1, y1, x2, y2).
+
+        Returns:
+            IoU (Intersection over Union) como float entre 0.0 y 1.0.
+        """
+        x1 = max(bbox_a[0], bbox_b[0])
+        y1 = max(bbox_a[1], bbox_b[1])
+        x2 = min(bbox_a[2], bbox_b[2])
+        y2 = min(bbox_a[3], bbox_b[3])
+        if x2 <= x1 or y2 <= y1:
+            return 0.0
+        intersection = (x2 - x1) * (y2 - y1)
+        area_a = (bbox_a[2] - bbox_a[0]) * (bbox_a[3] - bbox_a[1])
+        area_b = (bbox_b[2] - bbox_b[0]) * (bbox_b[3] - bbox_b[1])
+        union = area_a + area_b - intersection
+        return intersection / union if union > 0 else 0.0
+
+    # ------------------------------------------------------------------
     # Renderizado de resultados
     # ------------------------------------------------------------------
 
@@ -209,6 +326,18 @@ class StreamlitDashboard:
                     st.info(f"🟡 MEDIO — {mensaje}")
                 else:
                     st.success(f"🟢 BAJO — {mensaje}")
+
+        # --- Frame anotado (si hay supervision) ---
+        if SUPERVISION_AVAILABLE:
+            st.subheader("Visualización con supervision")
+            st.caption(
+                "Los frames anotados se muestran cuando supervision está disponible. "
+                "BoxAnnotator + LabelAnnotator + TraceAnnotator (ADR-019)."
+            )
+            st.info(
+                "Para ver frames anotados en tiempo real, ejecuta el pipeline "
+                "con el callback on_detection activado y frame anotado."
+            )
 
         # --- Footer con info del modelo ---
         st.divider()
