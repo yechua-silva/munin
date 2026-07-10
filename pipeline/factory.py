@@ -15,6 +15,8 @@ from munin.knowledge.ds132_kb import DS132KnowledgeBase
 from munin.knowledge.zone_config import ZoneConfig
 from munin.pipeline.frame_extractor import FrameExtractor
 from munin.pipeline.pipeline import Pipeline, PipelineCallbacks
+from munin.pipeline.frame_collector import CameraSource
+from munin.pipeline.interfaces import ITracker
 from munin.pipeline.ppe_checker import ComplianceMode, PPEComplianceChecker
 from munin.pipeline.two_model_detector import TwoModelDetector
 from munin.vlm.factory import VLMModelFactory
@@ -167,4 +169,128 @@ class PipelineFactory:
             ) from e
 
 
+    @staticmethod
+    def create_multi_camera(
+        settings: AppSettings,
+        sources: list[CameraSource],
+    ) -> MultiCameraPipeline:
+        """Crea pipeline multi-cámara con VLM queue.
+
+        Composition root para modo multi-cámara. Crea detector
+        compartido, tracker factory ligera (sin modelo YOLO propio
+        por cámara), checker, orchestrator y VLM queue.
+
+        Args:
+            settings: Config global de la aplicación.
+            sources: Lista de fuentes de cámara (CameraSource).
+
+        Returns:
+            MultiCameraPipeline listo para process_all().
+
+        Raises:
+            ConfigurationError: Si alguna dependencia falla.
+        """
+        try:
+            from munin.pipeline.multi_camera import MultiCameraPipeline
+            from munin.pipeline.vlm_queue import VLMQueue
+            from munin.pipeline.frame_collector import CameraSource as CS
+
+            logger.info(
+                "Creating MultiCameraPipeline from AppSettings: %d cameras",
+                len(sources),
+            )
+
+            # 1. Modelo VLM
+            model = VLMModelFactory.create(settings)
+
+            # 2. Knowledge base
+            ds132_kb = DS132KnowledgeBase(settings.ds132_kb_path)
+            zone_config = ZoneConfig.from_json(settings.zones_config_path)
+
+            # 3. Detector (compartido entre todas las cámaras)
+            if settings.compliance_mode == "dual_class":
+                from munin.pipeline.single_model_detector import (
+                    SingleModelDetector,
+                )
+                detector = SingleModelDetector(
+                    model_path=settings.yolo_ppe_model_path,
+                    confidence=settings.yolo_confidence_threshold,
+                    device=settings.yolo_device,
+                    imgsz=settings.yolo_imgsz,
+                )
+                logger.info("Multi-camera detector: SingleModelDetector")
+            else:
+                detector = TwoModelDetector(
+                    coco_model_path=settings.yolo_coco_model_path,
+                    ppe_model_path=settings.yolo_model_path,
+                    confidence=settings.yolo_confidence_threshold,
+                    device=settings.yolo_device,
+                    imgsz=settings.yolo_imgsz,
+                )
+                logger.info("Multi-camera detector: TwoModelDetector")
+
+            # 4. Tracker factory (crea trackers ligeros sin modelo propio)
+            def tracker_factory() -> ITracker:
+                from munin.pipeline.byte_track_adapter import ByteTrackAdapter
+                return ByteTrackAdapter(
+                    confidence=settings.yolo_confidence_threshold,
+                )
+
+            # 5. Checker
+            mode = (
+                ComplianceMode.DUAL_CLASS
+                if settings.compliance_mode == "dual_class"
+                else ComplianceMode.LEGACY
+            )
+            checker = PPEComplianceChecker(
+                zone_config=zone_config,
+                ds132_kb=ds132_kb,
+                mode=mode,
+            )
+
+            # 6. Orchestrator
+            orchestrator = MuninOrchestrator.from_model(
+                model,
+                timeout=settings.vlm_busy_timeout,
+                resize_width=settings.frame_resize_width,
+                resize_height=settings.frame_resize_height,
+                max_tokens=settings.vlm_max_tokens,
+            )
+
+            # 7. VLM Queue
+            vlm_queue = VLMQueue(
+                orchestrator=orchestrator,
+                max_size=settings.vlm_queue_max_size,
+                high_threshold=settings.vlm_queue_max_size // 2,
+                vlm_timeout=settings.vlm_busy_timeout,
+            )
+
+            # 8. Pipeline multi-cámara
+            pipeline = MultiCameraPipeline(
+                detector=detector,
+                sources=sources,
+                tracker_factory=tracker_factory,
+                checker=checker,
+                vlm_queue=vlm_queue,
+                zone_config=zone_config,
+                settings=settings,
+            )
+
+            logger.info(
+                "MultiCameraPipeline created: %d cameras, tracker=%s",
+                len(sources),
+                "ByteTrackAdapter (no-model)",
+            )
+            return pipeline
+
+        except ConfigurationError:
+            raise
+        except Exception as e:
+            logger.error("Failed to create MultiCameraPipeline: %s", e)
+            raise ConfigurationError(
+                f"Failed to create MultiCameraPipeline: {e}"
+            ) from e
+
+
 __all__ = ["PipelineFactory"]
+
