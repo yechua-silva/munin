@@ -9,7 +9,7 @@ configuración, schemas de datos, y utilidades.
 
 from __future__ import annotations
 
-from munin.rocm_patch import apply_nms_patch
+from .rocm_patch import apply_nms_patch
 
 apply_nms_patch()
 

@@ -163,8 +163,8 @@ class Pipeline:
                 if self._callbacks and self._callbacks.on_detection:
                     self._callbacks.on_detection(detections)
 
-                # c. Actualizar tracking con el frame completo
-                persons = self._tracker.update(frame)
+                # c. Actualizar tracking con detecciones (v4: ByteTrackAdapter recibe list[DetectionResult])
+                persons = self._tracker.update(detections)
 
                 # d. Verificar compliance EPP contra la zona
                 violations: list[Violation] = self._checker.check(persons, detections, zone)
