@@ -34,6 +34,8 @@ class Zone(BaseModel):
         riesgo_base: Nivel de riesgo base de la zona.
         min_confidence: Confianza mínima de YOLO para reportar.
         articulos_ds132: Artículos DS 132 aplicables a la zona.
+        polygon: Polígono(s) de la zona en coords normalizadas 0-1.
+            Lista de sub-polígonos (unión). None = sin filtro geométrico.
     """
 
     zone_id: str = Field(description="Identificador único de la zona")
@@ -47,6 +49,11 @@ class Zone(BaseModel):
         description="Confianza mínima de YOLO para reportar"
     )
     articulos_ds132: list[str] = Field(description="Artículos DS 132 aplicables")
+    polygon: list[list[list[float]]] | None = Field(
+        default=None,
+        description="Polígono(s) de la zona en coords normalizadas 0-1. "
+        "Lista de sub-polígonos (unión). None = sin filtro geométrico.",
+    )
 
 
 class AgentConfig(BaseModel):

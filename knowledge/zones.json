@@ -1,7 +1,7 @@
 {
   "metadata": {
     "faena": "Munin Demo — Faena Minera",
-    "version": "1.0.0"
+    "version": "2.0.0"
   },
   "zonas": [
     {
@@ -11,7 +11,8 @@
       "riesgo_base": "critico",
       "min_confidence": 0.7,
       "articulos_ds132": ["Art. 38", "Art. 42", "Art. 45"],
-      "descripcion": "Área de extracción de mineral con maquinaria pesada y riesgo de caída de rocas"
+      "descripcion": "Área de extracción de mineral con maquinaria pesada y riesgo de caída de rocas",
+      "polygon": [[[0.05, 0.1], [0.25, 0.05], [0.35, 0.2], [0.3, 0.4], [0.1, 0.35]]]
     },
     {
       "zone_id": "procesamiento",
@@ -20,7 +21,8 @@
       "riesgo_base": "alto",
       "min_confidence": 0.6,
       "articulos_ds132": ["Art. 38", "Art. 45"],
-      "descripcion": "Planta de procesamiento con chancadores, correas transportadoras y molinos"
+      "descripcion": "Planta de procesamiento con chancadores, correas transportadoras y molinos",
+      "polygon": [[[0.4, 0.2], [0.6, 0.15], [0.7, 0.3], [0.55, 0.45], [0.35, 0.35]]]
     },
     {
       "zone_id": "mantencion",
@@ -29,7 +31,8 @@
       "riesgo_base": "medio",
       "min_confidence": 0.5,
       "articulos_ds132": ["Art. 38", "Art. 42", "Art. 50"],
-      "descripcion": "Taller de mantención con trabajos en altura, soldadura y herramientas eléctricas"
+      "descripcion": "Taller de mantención con trabajos en altura, soldadura y herramientas eléctricas",
+      "polygon": null
     }
   ]
 }
