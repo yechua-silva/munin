@@ -156,7 +156,7 @@ class TestFilterByZone:
             ],
         )
         persons = [
-            TrackedPerson(persona_id=1, bbox=(0.1, 0.1, 0.2, 0.3), epp_detectado=set()),  # in sub1
+            TrackedPerson(persona_id=1, bbox=(0.1, 0.1, 0.2, 0.25), epp_detectado=set()),  # in sub1 (anchor_y=0.25 < 0.3)
             TrackedPerson(persona_id=2, bbox=(0.7, 0.7, 0.8, 0.85), epp_detectado=set()),  # in sub2
             TrackedPerson(persona_id=3, bbox=(0.4, 0.4, 0.5, 0.55), epp_detectado=set()),  # outside both
         ]
