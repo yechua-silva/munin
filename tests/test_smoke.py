@@ -249,9 +249,9 @@ class TestConfig:
         settings = AppSettings(_env_file=None)
         # VLM backend — ahora AMD on-premise por default
         assert settings.vlm_backend == VLMBackend.AMD
-        assert settings.amd_model == "openbmb/MiniCPM-V-2_6"
+        assert settings.amd_model == "InternVL2-8B"
         assert settings.amd_vllm_endpoint == "http://localhost:8000/v1"
-        assert settings.vlm_max_tokens == 8192
+        assert settings.vlm_max_tokens == 2048
         # Pipeline
         assert settings.frame_rate == 25
         assert settings.min_consecutive_frames == 3
