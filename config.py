@@ -105,11 +105,11 @@ class AppSettings(BaseSettings):
     )
     amd_vllm_endpoint: str = Field(default="http://localhost:8000/v1")
     amd_model: str = Field(
-        default="openbmb/MiniCPM-V-2_6",
-        description="Modelo VLM para AMD vLLM (MiniCPM-V-2.6: 8B params, ~8GB VRAM)",
+        default="InternVL2-8B",
+        description="Modelo VLM para AMD vLLM (InternVL2-8B: 8B params, ~8GB VRAM)",
     )
     vlm_max_tokens: int = Field(
-        default=8192,
+        default=2048,
         ge=256, le=32768,
         description="Max tokens para respuestas VLM (256-32768)",
     )
@@ -179,6 +179,44 @@ class AppSettings(BaseSettings):
     # Knowledge
     ds132_kb_path: str = Field(default="./knowledge/ds132_kb.json")
     zones_config_path: str = Field(default="./knowledge/zones.json")
+
+    # Multi-cámara (Track C)
+    multi_camera_enabled: bool = Field(
+        default=False,
+        description="Habilitar pipeline multi-cámara",
+    )
+    multi_camera_sources: str = Field(
+        default="",
+        description="JSON con lista de CameraSource configs",
+    )
+
+    # VLM Queue (Track C)
+    vlm_queue_max_size: int = Field(
+        default=10,
+        ge=1, le=100,
+        description="Máximo de requests en cola VLM",
+    )
+    vlm_queue_workers: int = Field(
+        default=1,
+        ge=1, le=4,
+        description="Número de worker threads VLM",
+    )
+    vlm_coalesce_frames: int = Field(
+        default=30,
+        ge=1, le=120,
+        description="Coalescing: frames consecutivos misma violación para skip",
+    )
+    vlm_aging_seconds: int = Field(
+        default=15,
+        ge=1, le=120,
+        description="Aging: segundos antes de subir prioridad",
+    )
+
+    # SinglePass default (CP4)
+    use_single_pass: bool = Field(
+        default=True,
+        description="Usar SinglePassAgent como default (true) o 3-agent secuencial (false)",
+    )
 
     # Logging
     log_level: str = Field(default="INFO")
