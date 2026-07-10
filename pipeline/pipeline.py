@@ -307,7 +307,10 @@ class Pipeline:
                     frame_number,
                     len(violations),
                 )
-                decisions = await self._orchestrator.analyze(frame, violations)
+                decisions = await self._orchestrator.analyze(
+                    frame, violations,
+                    use_single_pass=self._settings.use_single_pass,
+                )
                 all_decisions.extend(decisions)
             finally:
                 self._vlm_busy = False

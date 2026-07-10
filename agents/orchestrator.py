@@ -99,16 +99,20 @@ class MuninOrchestrator:
         self,
         frame: np.ndarray,
         violations: list[Violation],
+        use_single_pass: bool = True,
     ) -> list[AgentDecision]:
-        """Analiza violaciones con 3 agentes secuenciales.
+        """Analiza violaciones. SinglePass primero si use_single_pass=True.
 
-        Por cada violación ejecuta el pipeline de 3 agentes
-        (Extractor → ContextAnalyzer → Scorer). Si falla,
-        ejecuta SinglePassAgent como fallback por violación.
+        Cuando use_single_pass=True (default v4), intenta SinglePassAgent
+        primero. Si falla, cae a 3-agent secuencial.
+        Cuando use_single_pass=False (comportamiento v3), intenta 3-agent
+        primero. Si falla, cae a SinglePassAgent.
 
         Args:
             frame: Frame del video (HWC, BGR, uint8).
             violations: Violaciones detectadas por rule engine.
+            use_single_pass: True = SinglePass primero (default v4),
+                False = 3-agent secuencial primero (v3 legacy).
 
         Returns:
             Lista de AgentDecision validados.
@@ -117,67 +121,65 @@ class MuninOrchestrator:
             VLMError: Si todos los métodos fallan para alguna violación.
         """
         if not violations:
-            logger.info("No violations to analyze, returning empty list")
             return []
 
-        logger.info(
-            "Analyzing %d violation(s) with sequential 3-agent pipeline",
-            len(violations),
-        )
-
-        # Codificar frame a JPEG bytes (con resize 640×480 ADR-016)
         jpeg_bytes = self._encode_jpeg(frame)
-
         decisions: list[AgentDecision] = []
+
         for violation in violations:
-            try:
-                decision = await asyncio.wait_for(
-                    self._process_violation(jpeg_bytes, violation),
-                    timeout=self._timeout,
-                )
-                decisions.append(decision)
-            except (TimeoutError, asyncio.TimeoutError) as e:
-                logger.warning(
-                    "Sequential analysis timed out for violation %s: %s. "
-                    "Falling back to single-pass.",
-                    violation.persona_id,
-                    e,
-                )
+            if use_single_pass:
                 try:
                     decision = await asyncio.wait_for(
                         self._process_single_pass(jpeg_bytes, violation),
                         timeout=self._timeout,
                     )
                     decisions.append(decision)
-                except Exception as e2:
-                    logger.error(
-                        "Single-pass also failed for violation %s: %s. "
-                        "Using default decision.",
+                except Exception as e:
+                    logger.warning(
+                        "SinglePass failed for %s: %s. Trying 3-agent.",
                         violation.persona_id,
-                        e2,
+                        e,
                     )
-                    decisions.append(self._default_decision(violation))
-            except Exception as e:
-                logger.warning(
-                    "Sequential analysis failed for violation %s: %s. "
-                    "Falling back to single-pass.",
-                    violation.persona_id,
-                    e,
-                )
+                    try:
+                        decision = await asyncio.wait_for(
+                            self._process_violation(jpeg_bytes, violation),
+                            timeout=self._timeout,
+                        )
+                        decisions.append(decision)
+                    except Exception as e2:
+                        logger.error(
+                            "Both methods failed for %s: %s",
+                            violation.persona_id,
+                            e2,
+                        )
+                        decisions.append(self._default_decision(violation))
+            else:
+                # 3-agent sequential (comportamiento v3)
                 try:
                     decision = await asyncio.wait_for(
-                        self._process_single_pass(jpeg_bytes, violation),
+                        self._process_violation(jpeg_bytes, violation),
                         timeout=self._timeout,
                     )
                     decisions.append(decision)
-                except Exception as e2:
-                    logger.error(
-                        "Single-pass also failed for violation %s: %s. "
-                        "Using default decision.",
+                except Exception as e:
+                    logger.warning(
+                        "3-agent failed for %s: %s. Trying SinglePass.",
                         violation.persona_id,
-                        e2,
+                        e,
                     )
-                    decisions.append(self._default_decision(violation))
+                    try:
+                        decision = await asyncio.wait_for(
+                            self._process_single_pass(jpeg_bytes, violation),
+                            timeout=self._timeout,
+                        )
+                        decisions.append(decision)
+                    except Exception as e2:
+                        logger.error(
+                            "Both methods failed for %s: %s",
+                            violation.persona_id,
+                            e2,
+                        )
+                        decisions.append(self._default_decision(violation))
 
         return decisions
 
