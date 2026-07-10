@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from pydantic_ai import Agent, BinaryContent, ModelSettings
+from pydantic_ai import Agent, BinaryContent, ModelSettings, PromptedOutput
 from pydantic_ai.models.openai import OpenAIChatModel
 
 from munin.gate.schemas import AgentDecision
@@ -52,15 +52,19 @@ Responde SOLO con un JSON que cumpla este schema:
 def create_single_pass_agent(model: OpenAIChatModel) -> Agent[None, AgentDecision]:
     """Crea el agente single-pass (fallback) con PydanticAI.
 
+    ADR-022: Usa PromptedOutput (JSON mode) para compatibilidad con vLLM.
+    vLLM no soporta tool calling. PromptedOutput inyecta el schema
+    en el prompt y usa response_format json_object.
+
     Args:
-        model: Modelo VLM configurado (OpenAIChatModel con FireworksProvider).
+        model: Modelo VLM configurado (OpenAIChatModel con vLLM o Fireworks).
 
     Returns:
-        Agent configurado con output_type=AgentDecision.
+        Agent configurado con output_type=PromptedOutput(AgentDecision).
     """
     return Agent(
         model,
-        output_type=AgentDecision,
+        output_type=PromptedOutput(AgentDecision),
         retries={"output": 3},
         model_settings=ModelSettings(temperature=0.1, max_tokens=8192),
         system_prompt=PROMPT_SINGLE_PASS,

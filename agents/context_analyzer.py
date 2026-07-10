@@ -4,7 +4,7 @@ import logging
 from typing import Literal
 
 from pydantic import BaseModel, Field
-from pydantic_ai import Agent, BinaryContent, ModelSettings
+from pydantic_ai import Agent, BinaryContent, ModelSettings, PromptedOutput
 from pydantic_ai.models.openai import OpenAIChatModel
 
 logger = logging.getLogger(__name__)
@@ -92,15 +92,19 @@ def create_context_analyzer_agent(
 ) -> Agent[None, AnalysisResult]:
     """Crea el agente analizador de contexto con PydanticAI.
 
+    ADR-022: Usa PromptedOutput (JSON mode) para compatibilidad con vLLM.
+    vLLM no soporta tool calling. PromptedOutput inyecta el schema
+    en el prompt y usa response_format json_object.
+
     Args:
-        model: Modelo VLM configurado (OpenAIChatModel con FireworksProvider).
+        model: Modelo VLM configurado (OpenAIChatModel con vLLM o Fireworks).
 
     Returns:
-        Agent configurado con output_type=AnalysisResult.
+        Agent configurado con output_type=PromptedOutput(AnalysisResult).
     """
     return Agent(
         model,
-        output_type=AnalysisResult,
+        output_type=PromptedOutput(AnalysisResult),
         retries={"output": 3},
         model_settings=ModelSettings(temperature=0.1, max_tokens=8192),
         system_prompt=PROMPT_CONTEXT_ANALYZER,

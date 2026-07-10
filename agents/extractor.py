@@ -4,7 +4,7 @@ import logging
 from typing import Literal
 
 from pydantic import BaseModel, Field
-from pydantic_ai import Agent, BinaryContent, ModelSettings
+from pydantic_ai import Agent, BinaryContent, ModelSettings, PromptedOutput
 from pydantic_ai.models.openai import OpenAIChatModel
 
 logger = logging.getLogger(__name__)
@@ -125,15 +125,19 @@ Responde SOLO con un JSON que cumpla este schema:
 def create_extractor_agent(model: OpenAIChatModel) -> Agent[None, ExtractionResult]:
     """Crea el agente extractor con PydanticAI.
 
+    ADR-022: Usa PromptedOutput (JSON mode) en vez de Tool Output.
+    vLLM no soporta tool calling. PromptedOutput inyecta el schema
+    en el prompt y usa response_format json_object.
+
     Args:
-        model: Modelo VLM configurado (OpenAIChatModel con FireworksProvider).
+        model: Modelo VLM configurado (OpenAIChatModel con vLLM o Fireworks).
 
     Returns:
-        Agent configurado con output_type=ExtractionResult.
+        Agent configurado con output_type=PromptedOutput(ExtractionResult).
     """
     return Agent(
         model,
-        output_type=ExtractionResult,
+        output_type=PromptedOutput(ExtractionResult),
         retries={"output": 3},
         model_settings=ModelSettings(temperature=0.1, max_tokens=8192),
         system_prompt=PROMPT_EXTRACTOR,
