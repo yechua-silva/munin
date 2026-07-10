@@ -9,13 +9,25 @@ Componentes del pipeline de visión industrial:
 - IComplianceChecker: verificación de cumplimiento EPP por zona
 - Pipeline: orquestador del flujo completo
 - PipelineFactory: composition root para DI
+- FrameCollector: colector multi-fuente con threads (Track C)
+- VLMQueue: cola de prioridad VLM con backpressure (Track C)
+- MultiCameraPipeline: pipeline multi-cámara (Track C)
 """
 
+from munin.pipeline.frame_collector import CameraSource, FrameCollector
+from munin.pipeline.multi_camera import MultiCameraPipeline
 from munin.pipeline.pipeline import Pipeline, PipelineCallbacks
 from munin.pipeline.factory import PipelineFactory
+from munin.pipeline.vlm_queue import VLMQueue, VLMRequest, VLMResult
 
 __all__ = [
     "Pipeline",
     "PipelineCallbacks",
     "PipelineFactory",
+    "CameraSource",
+    "FrameCollector",
+    "MultiCameraPipeline",
+    "VLMQueue",
+    "VLMRequest",
+    "VLMResult",
 ]
