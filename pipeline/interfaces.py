@@ -75,18 +75,20 @@ class IDetector(Protocol):
 
 
 class ITracker(Protocol):
-    """Interfaz para tracking de personas entre frames (v3).
+    """Interfaz para tracking de personas entre frames (v4).
 
-    v3: update(frame) recibe el frame completo, no las detecciones.
-    El tracker internamente ejecuta model.track() para asignar IDs.
+    v4: update(detections) recibe las detecciones ya inferidas del
+    detector central. El tracker hace IoU matching para asignar IDs.
     NO asigna EPP — eso lo hace PPEComplianceChecker desde detections.
+
+    ADR-029: ITracker.update recibe list[DetectionResult].
     """
 
-    def update(self, frame: np.ndarray) -> list[TrackedPerson]:
-        """Actualiza tracking con un nuevo frame.
+    def update(self, detections: list[DetectionResult]) -> list[TrackedPerson]:
+        """Actualiza tracking desde detecciones ya inferidas.
 
         Args:
-            frame: Imagen np.ndarray HWC BGR uint8.
+            detections: Detecciones del detector central.
 
         Returns:
             Personas trackeadas con ID asignado. epp_detectado=set()

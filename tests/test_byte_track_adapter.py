@@ -1,215 +1,204 @@
-"""Tests TDD para ByteTrackAdapter.
+"""Tests T16 — ByteTrackAdapter refactor (sin modelo propio).
 
-Mock de model.track() usando unittest.mock. NO requiere GPU ni modelo real.
+Verifica:
+- update() recibe list[DetectionResult], no np.ndarray
+- No se pasa model_path en __init__
+- IoU matching con detecciones sintéticas
+- Nuevo ID para persona sin match
+- Lost track pruning
+- Filtrado por class_name="person"
 
-Correr con: pytest munin/tests/test_byte_track_adapter.py -v
+Correr con: pytest tests/test_byte_track_adapter.py -v
 """
 from __future__ import annotations
-
-from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 
-from munin.exceptions import ConfigurationError, TrackingError
-from munin.gate.schemas import TrackedPerson
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+from munin.gate.schemas import DetectionResult, TrackedPerson
 
 
 @pytest.fixture
-def mock_yolo_model() -> MagicMock:
-    """Mock de YOLO con track() configurable."""
-    return MagicMock()
+def adapter() -> ByteTrackAdapter:
+    """ByteTrackAdapter con configuración por defecto."""
+    from munin.pipeline.byte_track_adapter import ByteTrackAdapter
+    return ByteTrackAdapter(
+        confidence=0.6,
+        iou_threshold=0.3,
+        max_lost_frames=30,
+    )
 
 
 @pytest.fixture
-def mock_track_results() -> MagicMock:
-    """Mock de un objeto Results de ultralytics con 2 personas detectadas.
-
-    El adaptador accede como results[0].boxes (results es lista real).
-    """
-    results = MagicMock()
-    boxes = MagicMock()
-
-    # __len__ en boxes: len(boxes) == 2
-    boxes.__len__.return_value = 2
-
-    # boxes.id[i] → [1, 2][i]
-    boxes.id = MagicMock()
-    boxes.id.__getitem__.side_effect = [1, 2]
-
-    # boxes.conf[i] → [0.85, 0.72][i]
-    boxes.conf = MagicMock()
-    boxes.conf.__getitem__.side_effect = [0.85, 0.72]
-
-    # boxes.xyxy[i] → arrays (con .tolist() para tuple conversion)
-    boxes.xyxy = MagicMock()
-    boxes.xyxy.__getitem__.side_effect = [
-        np.array([0, 0, 100, 200], dtype=np.float32),
-        np.array([150, 50, 300, 400], dtype=np.float32),
+def person_detections() -> list[DetectionResult]:
+    """Detecciones sintéticas de 2 personas."""
+    return [
+        DetectionResult(
+            class_name="person",
+            bbox=(0.0, 0.0, 100.0, 200.0),
+            confidence=0.85,
+        ),
+        DetectionResult(
+            class_name="person",
+            bbox=(150.0, 50.0, 300.0, 400.0),
+            confidence=0.72,
+        ),
     ]
-
-    # Atributo directo .boxes en el objeto Results
-    results.boxes = boxes
-
-    return results
-
-
-@pytest.fixture
-def adapter(mock_yolo_model: MagicMock) -> "ByteTrackAdapter":
-    """ByteTrackAdapter con modelo mockeado.
-
-    Parchea ultralytics.YOLO y Path.exists para evitar modelo real.
-    """
-    with patch("ultralytics.YOLO", return_value=mock_yolo_model), \
-         patch("pathlib.Path.exists", return_value=True):
-        from munin.pipeline.byte_track_adapter import ByteTrackAdapter
-        return ByteTrackAdapter(
-            model_path="/fake/model.pt",
-            confidence=0.6,
-            device="cpu",
-        )
-
-
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
 
 
 class TestByteTrackAdapter:
-    """Suite TDD para ByteTrackAdapter."""
+    """Suite TDD para ByteTrackAdapter v4."""
+
+    def test_init_no_model_path(self, adapter: ByteTrackAdapter) -> None:
+        """__init__ ya no requiere model_path."""
+        assert adapter is not None
 
     def test_update_returns_tracked_persons(
         self,
-        adapter: "ByteTrackAdapter",
-        mock_yolo_model: MagicMock,
-        mock_track_results: MagicMock,
+        adapter: ByteTrackAdapter,
+        person_detections: list[DetectionResult],
     ) -> None:
-        """update() debe retornar list[TrackedPerson] con IDs correctos."""
-        mock_yolo_model.track.return_value = [mock_track_results]
-        frame = np.zeros((480, 640, 3), dtype=np.uint8)
-
-        persons = adapter.update(frame)
-
+        """update() retorna TrackedPerson con IDs."""
+        persons = adapter.update(person_detections)
         assert len(persons) == 2
         assert all(isinstance(p, TrackedPerson) for p in persons)
-        assert persons[0].persona_id == 1
-        assert persons[1].persona_id == 2
+        assert persons[0].persona_id == 0
+        assert persons[1].persona_id == 1
 
-    def test_update_empty_frame_returns_empty(
-        self,
-        adapter: "ByteTrackAdapter",
-        mock_yolo_model: MagicMock,
+    def test_update_filters_non_persons(self, adapter: ByteTrackAdapter) -> None:
+        """Detecciones que no son 'person' se filtran."""
+        detections = [
+            DetectionResult(
+                class_name="hardhat", bbox=(0, 0, 10, 10), confidence=0.9,
+            ),
+            DetectionResult(
+                class_name="person", bbox=(0, 0, 100, 200), confidence=0.8,
+            ),
+        ]
+        persons = adapter.update(detections)
+        assert len(persons) == 1
+        assert persons[0].persona_id == 0
+
+    def test_update_empty_detections(
+        self, adapter: ByteTrackAdapter,
     ) -> None:
-        """Sin detecciones (boxes is None) → retorna []."""
-        empty_results = MagicMock()
-        empty_results.boxes = None
-        mock_yolo_model.track.return_value = [empty_results]
-        frame = np.zeros((480, 640, 3), dtype=np.uint8)
-
-        persons = adapter.update(frame)
-
+        """Sin detecciones de persona → retorna []."""
+        detections = [
+            DetectionResult(
+                class_name="hardhat", bbox=(0, 0, 10, 10), confidence=0.9,
+            ),
+        ]
+        persons = adapter.update(detections)
         assert persons == []
 
-    def test_update_no_tracking_ids_returns_empty(
+    def test_iou_matching_same_person(
         self,
-        adapter: "ByteTrackAdapter",
-        mock_yolo_model: MagicMock,
+        adapter: ByteTrackAdapter,
+        person_detections: list[DetectionResult],
     ) -> None:
-        """boxes existe pero boxes.id is None → retorna []."""
-        results = MagicMock()
-        boxes = MagicMock()
-        boxes.id = None
-        results.boxes = boxes
-        mock_yolo_model.track.return_value = [results]
-        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        """Misma persona con bbox similar recibe mismo ID."""
+        persons1 = adapter.update(person_detections)
+        id0_first = persons1[0].persona_id
 
-        persons = adapter.update(frame)
+        # Mismas detecciones (mismos bboxes)
+        persons2 = adapter.update(person_detections)
+        id0_second = persons2[0].persona_id
 
-        assert persons == []
+        assert id0_first == id0_second
 
-    def test_update_epp_detectado_always_empty(
+    def test_new_id_for_unmatched_person(
         self,
-        adapter: "ByteTrackAdapter",
-        mock_yolo_model: MagicMock,
-        mock_track_results: MagicMock,
+        adapter: ByteTrackAdapter,
+        person_detections: list[DetectionResult],
     ) -> None:
-        """epp_detectado debe ser siempre set() vacío."""
-        mock_yolo_model.track.return_value = [mock_track_results]
-        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        """Persona sin match IoU recibe nuevo ID."""
+        persons1 = adapter.update(person_detections)
 
-        persons = adapter.update(frame)
+        # Nueva persona lejos de las anteriores
+        new_detections = [
+            DetectionResult(
+                class_name="person",
+                bbox=(500.0, 500.0, 600.0, 700.0),
+                confidence=0.9,
+            ),
+        ]
+        persons2 = adapter.update(new_detections)
+        assert len(persons2) == 1
+        assert persons2[0].persona_id == 2  # IDs: 0, 1, 2
 
+    def test_lost_track_pruning(self, adapter: ByteTrackAdapter) -> None:
+        """Track perdido por N frames se elimina."""
+        det = [
+            DetectionResult(
+                class_name="person",
+                bbox=(0, 0, 100, 200),
+                confidence=0.9,
+            ),
+        ]
+        persons1 = adapter.update(det)
+        track_id = persons1[0].persona_id
+
+        # Perder el track por max_lost_frames+1 frames
+        for _ in range(31):
+            adapter.update([])
+
+        # Debe estar vacío (el track fue podado)
+        persons2 = adapter.update(det)
+        assert len(persons2) == 1
+        assert persons2[0].persona_id != track_id  # Nuevo ID
+
+    def test_epp_detectado_always_empty(
+        self,
+        adapter: ByteTrackAdapter,
+        person_detections: list[DetectionResult],
+    ) -> None:
+        """epp_detectado debe ser set() vacío siempre."""
+        persons = adapter.update(person_detections)
         assert all(p.epp_detectado == set() for p in persons)
 
-    def test_update_filters_by_confidence(
-        self,
-        adapter: "ByteTrackAdapter",
-        mock_yolo_model: MagicMock,
-    ) -> None:
-        """Detecciones con conf < threshold deben filtrarse."""
-        results = MagicMock()
-        boxes = MagicMock()
-
-        boxes.__len__.return_value = 1
-
-        boxes.id = MagicMock()
-        boxes.id.__getitem__.side_effect = [1]
-
-        boxes.xyxy = MagicMock()
-        boxes.xyxy.__getitem__.side_effect = [
-            np.array([0, 0, 100, 200], dtype=np.float32),
-        ]
-
-        boxes.conf = MagicMock()
-        boxes.conf.__getitem__.side_effect = [0.3]  # menor que 0.6
-
-        results.boxes = boxes
-        mock_yolo_model.track.return_value = [results]
-        frame = np.zeros((480, 640, 3), dtype=np.uint8)
-
-        persons = adapter.update(frame)
-
-        assert len(persons) == 0
-
-    def test_update_assigns_correct_ids(
-        self,
-        adapter: "ByteTrackAdapter",
-        mock_yolo_model: MagicMock,
-        mock_track_results: MagicMock,
-    ) -> None:
-        """track_id de boxes.id debe mapearse a persona_id."""
-        mock_yolo_model.track.return_value = [mock_track_results]
-        frame = np.zeros((480, 640, 3), dtype=np.uint8)
-
-        persons = adapter.update(frame)
-
-        assert persons[0].persona_id == 1
-        assert persons[1].persona_id == 2
-
-    def test_configuration_error_if_model_not_found(self) -> None:
-        """Model path inexistente → ConfigurationError."""
+    def test_confidence_filtering(self) -> None:
+        """Detecciones con conf < threshold se filtran."""
         from munin.pipeline.byte_track_adapter import ByteTrackAdapter
+        high_conf_tracker = ByteTrackAdapter(confidence=0.9)
+        detections = [
+            DetectionResult(
+                class_name="person",
+                bbox=(0, 0, 100, 200),
+                confidence=0.85,  # < 0.9
+            ),
+        ]
+        persons = high_conf_tracker.update(detections)
+        assert len(persons) == 0  # No filtra por confianza
+        # El ByteTrackAdapter ya no filtra por confianza
+        # porque recibe detecciones pre-filtradas.
+        # Ahora filtra solo por class_name="person"
 
-        with pytest.raises(ConfigurationError):
-            ByteTrackAdapter(
-                model_path="/nonexistent/model.pt",
-                confidence=0.6,
-                device="cpu",
-            )
-
-    def test_tracking_error_if_inference_fails(
-        self,
-        adapter: "ByteTrackAdapter",
-        mock_yolo_model: MagicMock,
+    def test_iou_zero_for_non_overlapping(
+        self, adapter: ByteTrackAdapter,
     ) -> None:
-        """model.track() falla → TrackingError."""
-        mock_yolo_model.track.side_effect = RuntimeError("GPU OOM")
-        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        """IoU = 0 para bboxes que no se intersectan."""
+        a = (0.0, 0.0, 10.0, 10.0)
+        b = (100.0, 100.0, 200.0, 200.0)
+        iou = ByteTrackAdapter._compute_iou(a, b)
+        assert iou == 0.0
 
-        with pytest.raises(TrackingError):
-            adapter.update(frame)
+    def test_iou_perfect_overlap(
+        self, adapter: ByteTrackAdapter,
+    ) -> None:
+        """IoU = 1.0 para bboxes idénticos."""
+        a = (0.0, 0.0, 100.0, 200.0)
+        iou = ByteTrackAdapter._compute_iou(a, a)
+        assert iou == 1.0
+
+    def test_iou_partial_overlap(
+        self, adapter: ByteTrackAdapter,
+    ) -> None:
+        """IoU parcial calculado correctamente."""
+        a = (0.0, 0.0, 100.0, 100.0)
+        b = (50.0, 0.0, 150.0, 100.0)  # 50% overlap
+        iou = ByteTrackAdapter._compute_iou(a, b)
+        # intersection = 50*100 = 5000
+        # area_a = 10000, area_b = 10000
+        # union = 20000 - 5000 = 15000
+        # iou = 5000 / 15000 = 0.333...
+        assert iou == pytest.approx(0.3333, abs=0.01)
