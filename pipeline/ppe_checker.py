@@ -85,12 +85,13 @@ class PPEComplianceChecker:
     ) -> list[Violation]:
         """Verifica compliance de EPP para cada persona en la zona.
 
-        Para cada persona trackeada:
-        1. Asigna EPP detectado desde las detecciones del frame
-        2. Compara required_epp de la zona vs epp_detectado
-        3. En modo DUAL_CLASS, procesa clases negativas
-        4. Aplica regla especial de arnés (ADR-008)
-        5. Crea Violation con PPEMissing por cada EPP faltante
+        Paso a paso:
+        0. Filtrar personas por polígono de zona (v4)
+        1. Asignar EPP detectado desde las detecciones del frame
+        2. Comparar required_epp de la zona vs epp_detectado
+        3. En modo DUAL_CLASS, procesar clases negativas
+        4. Aplicar regla especial de arnés (ADR-008)
+        5. Crear Violation con PPEMissing por cada EPP faltante
 
         Args:
             persons: Personas trackeadas en el frame actual.
@@ -105,12 +106,17 @@ class PPEComplianceChecker:
             self._logger.debug("No persons to check, returning empty violations")
             return []
 
+        # STEP 0: Filtrar personas por zona geométrica (v4)
+        persons_in_zone = self._filter_by_zone(persons, zone)
+        if not persons_in_zone:
+            return []
+
         # 1. Asignar EPP a personas desde detections
-        self._assign_epp_to_persons(persons, detections)
+        self._assign_epp_to_persons(persons_in_zone, detections)
 
         violations: list[Violation] = []
 
-        for person in persons:
+        for person in persons_in_zone:
             epp_faltantes: list[PPEMissing] = []
             required_epp: list[str] = zone.required_epp
 
@@ -163,7 +169,7 @@ class PPEComplianceChecker:
 
         self._logger.debug(
             "Check complete: %d persons, %d violations",
-            len(persons),
+            len(persons_in_zone),
             len(violations),
         )
 
@@ -172,6 +178,78 @@ class PPEComplianceChecker:
     # ------------------------------------------------------------------
     # Métodos privados
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _point_in_polygon(
+        point_x: float,
+        point_y: float,
+        polygon: list[list[float]],
+    ) -> bool:
+        """Determina si un punto está dentro de un polígono.
+
+        Usa ray casting algorithm (even-odd rule).
+
+        Args:
+            point_x: Coordenada X del punto (normalizada 0-1).
+            point_y: Coordenada Y del punto (normalizada 0-1).
+            polygon: Lista de vértices [[x, y], ...] normalizados 0-1.
+
+        Returns:
+            True si el punto está dentro del polígono.
+        """
+        if not polygon or len(polygon) < 3:
+            return False
+
+        inside = False
+        n = len(polygon)
+        j = n - 1
+        for i in range(n):
+            xi, yi = polygon[i]
+            xj, yj = polygon[j]
+            if ((yi > point_y) != (yj > point_y)):
+                x_intersect = (xj - xi) * (point_y - yi) / (yj - yi) + xi
+                if point_x < x_intersect:
+                    inside = not inside
+            j = i
+        return inside
+
+    @staticmethod
+    def _filter_by_zone(
+        persons: list[TrackedPerson],
+        zone: Zone,
+    ) -> list[TrackedPerson]:
+        """Filtra personas dentro del polígono de la zona.
+
+        Usa BOTTOM_CENTER del bbox como anchor (posición de pies).
+        Si zone.polygon es None, retorna todas las personas.
+
+        Args:
+            persons: Todas las personas trackeadas.
+            zone: Zona con polígono opcional.
+
+        Returns:
+            Personas dentro del polígono (o todas si polygon=None).
+        """
+        if zone.polygon is None:
+            return persons
+
+        persons_in_zone: list[TrackedPerson] = []
+        for person in persons:
+            # BOTTOM_CENTER = ((x1+x2)/2, y2)
+            x1, y1, x2, y2 = person.bbox
+            anchor_x = (x1 + x2) / 2.0
+            anchor_y = y2
+
+            for sub_polygon in zone.polygon:
+                if PPEComplianceChecker._point_in_polygon(anchor_x, anchor_y, sub_polygon):
+                    persons_in_zone.append(person)
+                    break
+
+        logger.debug(
+            "Zone filter: %d/%d persons in zone '%s'",
+            len(persons_in_zone), len(persons), zone.zone_id,
+        )
+        return persons_in_zone
 
     def _assign_epp_to_persons(
         self,
