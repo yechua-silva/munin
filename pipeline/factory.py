@@ -101,10 +101,7 @@ class PipelineFactory:
             try:
                 from munin.pipeline.byte_track_adapter import ByteTrackAdapter
                 tracker = ByteTrackAdapter(
-                    model_path=settings.yolo_coco_model_path,
                     confidence=settings.yolo_confidence_threshold,
-                    device=settings.yolo_device,
-                    imgsz=settings.yolo_imgsz,
                 )
                 logger.info("Tracker: ByteTrackAdapter created successfully")
             except Exception as e:

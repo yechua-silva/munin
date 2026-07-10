@@ -105,6 +105,14 @@ class ByteTrackAdapter:
             self._tracks[track_id]["lost_frames"] = 0
             matched_track_ids.add(track_id)
 
+        # Incrementar lost_frames en tracks PRE-EXISTENTES no matched
+        for track_id, track in list(self._tracks.items()):
+            # Solo incrementar lost_frames en tracks que YA existían
+            # y no fueron matched. New tracks creados abajo empiezan en 0
+            # y NO se incrementan en este frame.
+            if track_id not in matched_track_ids:
+                track["lost_frames"] += 1
+
         # Crear nuevos tracks para detecciones no matched
         for i, det in enumerate(persons_dets):
             if i not in used_det_idx:
@@ -114,11 +122,6 @@ class ByteTrackAdapter:
                     "bbox": det.bbox,
                     "lost_frames": 0,
                 }
-
-        # Incrementar lost en tracks no matched
-        for track_id in self._tracks:
-            if track_id not in matched_track_ids:
-                self._tracks[track_id]["lost_frames"] += 1
 
         self._prune_lost()
 

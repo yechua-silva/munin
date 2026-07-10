@@ -156,47 +156,56 @@ class TestByteTrackAdapter:
         persons = adapter.update(person_detections)
         assert all(p.epp_detectado == set() for p in persons)
 
-    def test_confidence_filtering(self) -> None:
-        """Detecciones con conf < threshold se filtran."""
+    def test_confidence_not_filtered_by_tracker(self) -> None:
+        """El tracker NO filtra por confianza (recibe detecciones pre-filtradas).
+
+        v4: ByteTrackAdapter recibe detecciones ya filtradas por el detector.
+        El tracker solo filtra por class_name='person' y hace IoU matching.
+        La confianza se maneja en el detector, no en el tracker.
+        """
         from munin.pipeline.byte_track_adapter import ByteTrackAdapter
         high_conf_tracker = ByteTrackAdapter(confidence=0.9)
         detections = [
             DetectionResult(
                 class_name="person",
                 bbox=(0, 0, 100, 200),
-                confidence=0.85,  # < 0.9
+                confidence=0.85,  # < 0.9, pero el tracker no filtra por esto
             ),
         ]
         persons = high_conf_tracker.update(detections)
-        assert len(persons) == 0  # No filtra por confianza
-        # El ByteTrackAdapter ya no filtra por confianza
-        # porque recibe detecciones pre-filtradas.
-        # Ahora filtra solo por class_name="person"
+        # El tracker NO filtra por confianza — retorna la persona igual
+        assert len(persons) == 1
 
     def test_iou_zero_for_non_overlapping(
         self, adapter: ByteTrackAdapter,
     ) -> None:
         """IoU = 0 para bboxes que no se intersectan."""
+        from munin.pipeline.byte_track_adapter import ByteTrackAdapter as BTA
+
         a = (0.0, 0.0, 10.0, 10.0)
         b = (100.0, 100.0, 200.0, 200.0)
-        iou = ByteTrackAdapter._compute_iou(a, b)
+        iou = BTA._compute_iou(a, b)
         assert iou == 0.0
 
     def test_iou_perfect_overlap(
         self, adapter: ByteTrackAdapter,
     ) -> None:
         """IoU = 1.0 para bboxes idénticos."""
+        from munin.pipeline.byte_track_adapter import ByteTrackAdapter as BTA
+
         a = (0.0, 0.0, 100.0, 200.0)
-        iou = ByteTrackAdapter._compute_iou(a, a)
+        iou = BTA._compute_iou(a, a)
         assert iou == 1.0
 
     def test_iou_partial_overlap(
         self, adapter: ByteTrackAdapter,
     ) -> None:
         """IoU parcial calculado correctamente."""
+        from munin.pipeline.byte_track_adapter import ByteTrackAdapter as BTA
+
         a = (0.0, 0.0, 100.0, 100.0)
         b = (50.0, 0.0, 150.0, 100.0)  # 50% overlap
-        iou = ByteTrackAdapter._compute_iou(a, b)
+        iou = BTA._compute_iou(a, b)
         # intersection = 50*100 = 5000
         # area_a = 10000, area_b = 10000
         # union = 20000 - 5000 = 15000

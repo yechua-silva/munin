@@ -23,13 +23,13 @@ from munin.pipeline.interfaces import (
 class TestInterfacesV3:
     """Suite TDD para interfaces v3."""
 
-    def test_itracker_update_takes_frame_not_detections(self) -> None:
-        """ITracker.update debe aceptar np.ndarray (frame), no list[DetectionResult]."""
+    def test_itracker_update_takes_detections(self) -> None:
+        """ITracker.update debe aceptar list[DetectionResult] (v4)."""
         sig = inspect.signature(ITracker.update)
         params = list(sig.parameters.keys())
-        assert "frame" in params or params[1] == "frame"
-        # El segundo parámetro (después de self) debe ser 'frame'
-        assert params[1] == "frame"
+        assert "detections" in params or params[1] == "detections"
+        # El segundo parámetro (después de self) debe ser 'detections'
+        assert params[1] == "detections"
 
     def test_icompliance_checker_check_takes_three_params(self) -> None:
         """IComplianceChecker.check debe aceptar persons, detections, zone."""
@@ -45,13 +45,13 @@ class TestInterfacesV3:
         params = list(sig.parameters.keys())
         assert "video_path" in params or params[1] == "video_path"
 
-    def test_byte_track_adapter_satisfies_itracker(self) -> None:
-        """ByteTrackAdapter satisface ITracker v3 (duck typing)."""
+    def test_byte_track_adapter_satisfies_itracker_v4(self) -> None:
+        """ByteTrackAdapter satisface ITracker v4 (duck typing)."""
         from munin.pipeline.byte_track_adapter import ByteTrackAdapter
         # Verificar que tiene método update con la firma correcta
         sig = inspect.signature(ByteTrackAdapter.update)
         params = list(sig.parameters.keys())
-        assert params[1] == "frame"
+        assert params[1] == "detections"
 
     def test_ppe_checker_satisfies_icompliance_checker_v3(self) -> None:
         """PPEComplianceChecker.check tiene 3 params (persons, detections, zone)."""
