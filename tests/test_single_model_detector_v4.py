@@ -194,6 +194,9 @@ class TestParseResultsV4:
         mock_result.boxes.append(high_conf_box)
 
         # Below threshold
+        low_conf_box = MagicMock()
+        low_conf_box.cls = [1]
+        low_conf_box.conf = [0.4]
         low_conf_box.xyxy = [np.array([50, 60, 150, 250])]
         mock_result.boxes.append(low_conf_box)
 
