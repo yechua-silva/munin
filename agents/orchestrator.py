@@ -71,6 +71,7 @@ class MuninOrchestrator:
         timeout: float = 300.0,
         resize_width: int = 640,
         resize_height: int = 480,
+        max_tokens: int = 2048,
     ) -> MuninOrchestrator:
         """Crea el orquestador con todos los agentes desde un modelo.
 
@@ -79,15 +80,16 @@ class MuninOrchestrator:
             timeout: Timeout por violación.
             resize_width: Ancho de redimension para VLM (default 640).
             resize_height: Alto de redimension para VLM (default 480).
+            max_tokens: Máximo de tokens en respuesta VLM (default 2048).
 
         Returns:
             MuninOrchestrator listo para usar.
         """
         return cls(
-            extractor=create_extractor_agent(model),
-            analyzer=create_context_analyzer_agent(model),
-            scorer=create_scorer_agent(model),
-            single_pass=create_single_pass_agent(model),
+            extractor=create_extractor_agent(model, max_tokens=max_tokens),
+            analyzer=create_context_analyzer_agent(model, max_tokens=max_tokens),
+            scorer=create_scorer_agent(model, max_tokens=max_tokens),
+            single_pass=create_single_pass_agent(model, max_tokens=max_tokens),
             timeout=timeout,
             resize_width=resize_width,
             resize_height=resize_height,

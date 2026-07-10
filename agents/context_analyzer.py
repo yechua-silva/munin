@@ -89,6 +89,7 @@ Responde SOLO con un JSON que cumpla este schema:
 
 def create_context_analyzer_agent(
     model: OpenAIChatModel,
+    max_tokens: int = 2048,
 ) -> Agent[None, AnalysisResult]:
     """Crea el agente analizador de contexto con PydanticAI.
 
@@ -98,6 +99,7 @@ def create_context_analyzer_agent(
 
     Args:
         model: Modelo VLM configurado (OpenAIChatModel con vLLM o Fireworks).
+        max_tokens: Máximo de tokens en respuesta VLM (default 2048).
 
     Returns:
         Agent configurado con output_type=PromptedOutput(AnalysisResult).
@@ -106,7 +108,7 @@ def create_context_analyzer_agent(
         model,
         output_type=PromptedOutput(AnalysisResult),
         retries={"output": 3},
-        model_settings=ModelSettings(temperature=0.1, max_tokens=8192),
+        model_settings=ModelSettings(temperature=0.1, max_tokens=max_tokens),
         system_prompt=PROMPT_CONTEXT_ANALYZER,
     )
 

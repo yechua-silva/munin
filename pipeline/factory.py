@@ -125,12 +125,13 @@ class PipelineFactory:
                 mode=mode,
             )
 
-            # 8. Orchestrator con resize y timeout (ADR-016)
+            # 8. Orchestrator con resize, timeout y max_tokens (ADR-016)
             orchestrator = MuninOrchestrator.from_model(
                 model,
                 timeout=settings.vlm_busy_timeout,
                 resize_width=settings.frame_resize_width,
                 resize_height=settings.frame_resize_height,
+                max_tokens=settings.vlm_max_tokens,
             )
 
             # 9. Ensamblar pipeline

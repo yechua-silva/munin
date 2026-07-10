@@ -122,7 +122,10 @@ Responde SOLO con un JSON que cumpla este schema:
 """
 
 
-def create_extractor_agent(model: OpenAIChatModel) -> Agent[None, ExtractionResult]:
+def create_extractor_agent(
+    model: OpenAIChatModel,
+    max_tokens: int = 2048,
+) -> Agent[None, ExtractionResult]:
     """Crea el agente extractor con PydanticAI.
 
     ADR-022: Usa PromptedOutput (JSON mode) en vez de Tool Output.
@@ -131,6 +134,7 @@ def create_extractor_agent(model: OpenAIChatModel) -> Agent[None, ExtractionResu
 
     Args:
         model: Modelo VLM configurado (OpenAIChatModel con vLLM o Fireworks).
+        max_tokens: Máximo de tokens en respuesta VLM (default 2048).
 
     Returns:
         Agent configurado con output_type=PromptedOutput(ExtractionResult).
@@ -139,7 +143,7 @@ def create_extractor_agent(model: OpenAIChatModel) -> Agent[None, ExtractionResu
         model,
         output_type=PromptedOutput(ExtractionResult),
         retries={"output": 3},
-        model_settings=ModelSettings(temperature=0.1, max_tokens=8192),
+        model_settings=ModelSettings(temperature=0.1, max_tokens=max_tokens),
         system_prompt=PROMPT_EXTRACTOR,
     )
 
