@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Agent layer — agentes VLM con PydanticAI Agents.
 
 Agentes especializados en análisis de violaciones de EPP:

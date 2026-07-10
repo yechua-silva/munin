@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """VLM layer — modelos de Vision Language Model via PydanticAI Agents.
 
 Soporta múltiples backends:

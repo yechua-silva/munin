@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Pipeline layer — extracción, detección, tracking y compliance.
 
 Componentes del pipeline de visión industrial:
